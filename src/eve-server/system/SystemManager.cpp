@@ -25,6 +25,7 @@
 
 #include "eve-server.h"
 
+#include "decorators/GateDecorator_Billboards.h"
 #include "Client.h"
 #include "EVEServerConfig.h"
 #include "account/AccountService.h"
@@ -458,6 +459,12 @@ bool SystemManager::LoadSystemStatics() {
     }
 
     _log(SERVER__INIT, "SystemManager::LoadSystemStatics() - %u Static System entities loaded for %s(%u)", entities.size(), m_data.name.c_str(), m_data.systemID);
+     // >>> ADDED: decorate gates & belts once statics exist <<<
+    {
+        GateDecorators::Config cfg;  // defaults: global billboards + patrols
+        GateDecorators::DecorateGates(*this, cfg);
+        GateDecorators::DecorateBelts(*this, cfg);
+    }
     entities.clear();
     return true;
 }
