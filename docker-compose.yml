@@ -14,9 +14,9 @@ services:
     links:
       - "db"
     environment:
-      - SEED_MARKET=${SEED_MARKET:-FALSE} # Set to TRUE to seed the market when the server starts for the first time
+      - SEED_MARKET=${SEED_MARKET:-TRUE} # Set to TRUE to seed the market when the server starts for the first time
       - SEED_SATURATION=${SEED_SATURATION:-80} # Set saturation level of seed
-      - SEED_REGIONS=${SEED_REGIONS:-Derelik,The Citadel,The Forge,Essence} # Define regions to be seeded
+      - SEED_REGIONS=${SEED_REGIONS:-Derelik,The Citadel,The Forge,Essence,Verge Vendor,Everyshore,Tash-Murkon} # Define regions to be seeded
       - RUN_WITH_GDB=${RUN_GDB:-FALSE} #Set to TRUE to run evemu with gdb automatically
     stdin_open: true # Enables stdin for the container. Attach to it with 'docker attach'
     tty: true
@@ -24,19 +24,20 @@ services:
       - SYS_PTRACE
 
   db:
-    image: "bitnami/mariadb:11.4"
+    image: "bitnami/mariadb:latest"
     container_name: evemu_db
     volumes:
-      - db:/bitnami/mariadb
+      - evemu_mariadb:/bitnami
     # If you want to connect to the Database pick your host port to map it to, (host-port:container-port) below. 
-    #ports:
-    #  - "3306:3306"  
+    ports:
+      - "3306:3306"  
     environment:
-      - ALLOW_EMPTY_PASSWORD=yes
+      - MARIADB_ROOT_PASSWORD=evemu_root_pass123
       - MARIADB_USER=evemu
       - MARIADB_PASSWORD=evemu
       - MARIADB_DATABASE=evemu
 volumes:
+  evemu_mariadb:
   db:
   config:
   server_cache:
