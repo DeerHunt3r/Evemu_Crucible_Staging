@@ -1,3 +1,5 @@
+#include "decorators/GateDecorator_Billboards.h"
+#include "decorators/GateDecorator_Billboards.h"
 /*
     ------------------------------------------------------------------------------------
     LICENSE:
@@ -92,6 +94,7 @@ m_secValue(1.1f)
     m_clients.clear();
     m_jumpMap.clear();
     m_moonMap.clear();
+    { GateDecorators::Config cfg; GateDecorators::DecorateGates(*this, cfg); GateDecorators::DecorateBelts(*this, cfg); }
     m_entities.clear();
     m_planetMap.clear();
     m_gateMap.clear();
@@ -351,6 +354,7 @@ void SystemManager::UnloadSystem() {
     // this is dupe container. contents unloaded in another call
     m_npcs.clear();
     // at this point, system entity list should be clear...but just in case, hit it again
+    { GateDecorators::Config cfg; GateDecorators::DecorateGates(*this, cfg); GateDecorators::DecorateBelts(*this, cfg); }
     m_entities.clear();
     // this is dupe container. contents unloaded in another call
     m_ticEntities.clear();
@@ -379,7 +383,9 @@ void SystemManager::UnloadSystem() {
 
 bool SystemManager::LoadSystemStatics() {
     std::vector<DBSystemEntity> entities;
+    { GateDecorators::Config cfg; GateDecorators::DecorateGates(*this, cfg); GateDecorators::DecorateBelts(*this, cfg); }
     entities.clear();
+    { GateDecorators::Config cfg; GateDecorators::DecorateGates(*this, cfg); GateDecorators::DecorateBelts(*this, cfg); }
     m_entities.clear();
     m_staticEntities.clear();
     if (!SystemDB::LoadSystemStaticEntities(m_data.systemID, entities)) {
@@ -458,12 +464,14 @@ bool SystemManager::LoadSystemStatics() {
     }
 
     _log(SERVER__INIT, "SystemManager::LoadSystemStatics() - %u Static System entities loaded for %s(%u)", entities.size(), m_data.name.c_str(), m_data.systemID);
+    { GateDecorators::Config cfg; GateDecorators::DecorateGates(*this, cfg); GateDecorators::DecorateBelts(*this, cfg); }
     entities.clear();
     return true;
 }
 
 bool SystemManager::LoadSystemDynamics() {
     std::vector<DBSystemDynamicEntity> entities;
+    { GateDecorators::Config cfg; GateDecorators::DecorateGates(*this, cfg); GateDecorators::DecorateBelts(*this, cfg); }
     entities.clear();
     if (!SystemDB::LoadSystemDynamicEntities(m_data.systemID, entities)) {
         sLog.Error( "SystemManager::LoadSystemDynamics()", "Unable to load dynamic entities during boot of %s(%u).", m_data.name.c_str(), m_data.systemID);
@@ -497,6 +505,7 @@ bool SystemManager::LoadSystemDynamics() {
 
 bool SystemManager::LoadPlayerDynamics() {
     std::vector<DBSystemDynamicEntity> entities;
+    { GateDecorators::Config cfg; GateDecorators::DecorateGates(*this, cfg); GateDecorators::DecorateBelts(*this, cfg); }
     entities.clear();
     if (!SystemDB::LoadPlayerDynamicEntities(m_data.systemID, entities)) {
         sLog.Error( "SystemManager::LoadPlayerDynamics()", "Unable to load player dynamic entities in %s(%u).", m_data.name.c_str(), m_data.systemID);
