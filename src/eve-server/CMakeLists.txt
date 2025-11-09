@@ -34,6 +34,7 @@ SET( INCLUDE
      "${TARGET_INCLUDE_DIR}/Allocators.h")
 SET( SOURCE
      "${TARGET_SOURCE_DIR}/eve-server.cpp"
+     "${TARGET_SOURCE_DIR}/decorators/GateDecorator_Billboards.cpp"
      "${TARGET_SOURCE_DIR}/Client.cpp"
      "${TARGET_SOURCE_DIR}/ClientSession.cpp"
      "${TARGET_SOURCE_DIR}/ConsoleCommands.cpp"
