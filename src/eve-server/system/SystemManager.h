@@ -198,6 +198,8 @@ private:
     std::map<uint32, uint8> m_jumpMap;  // timestamp/jumps
     // may have to do kill data like jumps above
 
+
+
     // for spawn systems     -allan 15July15
     uint8 m_beltCount;
     uint8 m_gateCount;
