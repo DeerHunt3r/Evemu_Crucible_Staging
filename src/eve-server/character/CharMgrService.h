@@ -47,9 +47,28 @@ protected:
     PyResult GetPrivateInfo(PyCallArgs& call, PyInt* characterID);
     PyResult AddToBounty(PyCallArgs& call, PyInt* characterID, PyInt* amount);
     PyResult GetTopBounties(PyCallArgs& call);
+    // ----- Notepad / Owner Notes -----
+    // Generic handler (used internally)
+    PyResult AddOwnerNote(PyCallArgs& call);
+
+    // These overloads are for the dispatcher – the client calls
+    // AddOwnerNote(label, body) in *either* order:
+    //   (PyString, PyWString) or (PyWString, PyString)
     PyResult AddOwnerNote(PyCallArgs& call, PyString* idStr, PyWString* part);
+    PyResult AddOwnerNote(PyCallArgs& call, PyWString* part, PyString* idStr);
+
     PyResult GetOwnerNote(PyCallArgs& call, PyInt* noteID);
     PyResult GetOwnerNoteLabels(PyCallArgs& call);
+    
+    // EditOwnerNote overloads
+    PyResult EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyWString* bodyW);
+    PyResult EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyWString* labelW, PyWString* bodyW);
+    PyResult EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyString* labelS, PyWString* bodyW);
+
+
+
+    PyResult RemoveOwnerNote(PyCallArgs& call, PyInt* noteID);
+
     PyResult GetContactList(PyCallArgs& call);
     PyResult GetCloneTypeID(PyCallArgs& call);
     PyResult GetHomeStation(PyCallArgs& call);

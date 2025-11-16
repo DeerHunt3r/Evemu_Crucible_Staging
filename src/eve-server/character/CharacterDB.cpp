@@ -1440,56 +1440,95 @@ bool CharacterDB::EditOwnerNote(uint32 charID, uint32 noteID, const std::string 
     return true;
 }
 
-PyRep *CharacterDB::GetOwnerNoteLabels(uint32 charID) {
-    DBQueryResult res;
-    if (!sDatabase.RunQuery(res, "SELECT noteID, label FROM chrOwnerNote WHERE ownerID = %u", charID))
+bool CharacterDB::RemoveOwnerNote(uint32 charID, uint32 noteID)
+{
+    DBerror err;
+    uint32 affectedRows = 0;
+
+    if (!sDatabase.RunQuery(err, affectedRows,
+        "DELETE FROM chrOwnerNote WHERE ownerID=%u AND noteID=%u",
+        charID, noteID))
     {
-        codelog(DATABASE__ERROR, "Error on query: %s", res.error.c_str());
+        _log(DATABASE__ERROR,
+             "RemoveOwnerNote: Failed to delete owner note %u for char %u: %s",
+             noteID, charID, err.c_str());
+        return false;
+    }
+
+    // Optional: we don’t log anything if nothing was deleted.
+    return true;
+}
+
+PyRep* CharacterDB::GetOwnerNoteLabels(uint32 charID)
+{
+    DBQueryResult res;
+    DBResultRow   row;
+
+    // Fetch all noteIDs + labels for this character.
+    if (!sDatabase.RunQuery(
+            res,
+            "SELECT noteID, label "
+            "FROM chrOwnerNote "
+            "WHERE ownerID = %u "
+            "ORDER BY noteID ASC",
+            charID))
+    {
+        _log(DATABASE__ERROR,
+             "GetOwnerNoteLabels: Failed query for char %u", charID);
+        return PyStatic.NewNone();
+    }
+
+    // Build the row descriptor.
+    DBRowDescriptor* header = new DBRowDescriptor();
+    header->AddColumn("noteID", DBTYPE_I4);
+    header->AddColumn("label",  DBTYPE_WSTR);
+
+    // NOTE: CRowSet expects DBRowDescriptor**.
+    CRowSet* rowset = new CRowSet(&header);
+
+    while (res.GetRow(row))
+    {
+        PyPackedRow* prow = rowset->NewRow();
+
+        // noteID column
+        prow->SetField("noteID", new PyInt(row.GetUInt(0)));
+
+        // label column (varchar in DB → std::string → PyWString)
+        const char* label_c = row.IsNull(1) ? "" : row.GetText(1);
+        std::string label_s(label_c);
+
+        prow->SetField("label", new PyWString(label_s));
+    }
+
+    return rowset;
+}
+
+
+PyRep* CharacterDB::GetOwnerNote(uint32 charID, uint32 noteID)
+{
+    DBQueryResult res;
+
+    // Important: return BOTH label and note so the client can access row.label and row.note
+    if (!sDatabase.RunQuery(
+            res,
+            "SELECT label, note FROM chrOwnerNote "
+            "WHERE ownerID = %u AND noteID = %u",
+            charID, noteID))
+    {
+        codelog(
+            DATABASE__ERROR,
+            "GetOwnerNote: query failed for ownerID=%u, noteID=%u: %s",
+            charID,
+            noteID,
+            res.error.c_str());
         return nullptr;
     }
 
+    // Wrap the result into the rowset the client expects.
     return DBResultToCRowset(res);
 }
 
-PyRep *CharacterDB::GetOwnerNote(uint32 charID, uint32 noteID) {
-    /*
-                    [PyTuple 6 items]
-                      [PyTuple 2 items]
-                        [PyString "noteDate"]
-                        [PyInt 64]
-                      [PyTuple 2 items]
-                        [PyString "typeID"]
-                        [PyInt 2]
-                      [PyTuple 2 items]
-                        [PyString "referenceID"]
-                        [PyInt 3]
-                      [PyTuple 2 items]
-                        [PyString "note"]
-                        [PyInt 130]
-                      [PyTuple 2 items]
-                        [PyString "userID"]
-                        [PyInt 3]
-                      [PyTuple 2 items]
-                        [PyString "label"]
-                        [PyInt 130]
-          [PyPackedRow 19 bytes]
-            ["noteDate" => <129041092800000000> [FileTime]]
-            ["typeID" => <1> [I2]]
-            ["referenceID" => <1661059544> [I4]]
-            ["note" => <1::F::0::Main|> [WStr]]
-            ["userID" => <0> [I4]]
-            ["label" => <S:Folders> [WStr]]
-            */
-    DBQueryResult res;
 
-    if (!sDatabase.RunQuery(res, "SELECT note FROM chrOwnerNote WHERE ownerID = %u AND noteID = %u", charID, noteID))
-    {
-        codelog(DATABASE__ERROR, "Error on query: %s", res.error.c_str());
-        return nullptr;
-    }
-
-    return DBResultToCRowset(res);
-}
 
 void CharacterDB::EditLabel(uint32 charID, uint32 labelID, uint32 color, std::string name)
 {
@@ -2208,4 +2247,21 @@ uint32_t CharacterDB::SaveCharShipFitting(PyDict &fitting, uint32_t ownerID) {
         }
     }
     return fittingID;
+}
+
+// Update only the note label/title
+bool CharacterDB::SetOwnerNoteLabel(uint32 charID, uint32 noteID, const std::string& label)
+{
+    DBerror err;
+    std::string lblS;
+    sDatabase.DoEscapeString(lblS, label);
+
+    if (!sDatabase.RunQuery(err,
+        "UPDATE chrOwnerNote SET label='%s' WHERE ownerID=%u AND noteID=%u",
+        lblS.c_str(), charID, noteID))
+    {
+        codelog(DATABASE__ERROR, "Error on query: %s", err.c_str());
+        return false;
+    }
+    return true;
 }

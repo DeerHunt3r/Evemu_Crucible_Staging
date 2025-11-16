@@ -94,6 +94,7 @@ struct CorpData;
 class CharacterDB : public ServiceDB
 {
 public:
+    bool        SetOwnerNoteLabel(uint32 charID, uint32 noteID, const std::string& label);
     static uint32 NewCharacter(const CharacterData& data, const CorpData& corpData);
     static bool SaveCharacter(uint32 charID, const CharacterData &data);
     static bool SaveCorpData(uint32 charID, const CorpData &data);
@@ -186,7 +187,9 @@ public:
 
     uint32      AddOwnerNote(uint32 charID, const std::string &label, const std::string &content);
     bool        EditOwnerNote(uint32 charID, uint32 noteID, const std::string &label, const std::string &content);
+    bool        RemoveOwnerNote(uint32 charID, uint32 noteID);   // NEW
 
+   
     static int64       PrepareCharacterForDelete(uint32 accountID, uint32 charID);
     static void        CancelCharacterDeletePrepare(uint32 accountID, uint32 charID);
 
@@ -297,3 +300,4 @@ public:
 };
 
 #endif
+
