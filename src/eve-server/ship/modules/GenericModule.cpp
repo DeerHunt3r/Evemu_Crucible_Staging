@@ -63,14 +63,6 @@ m_launcher(false)
 // throwing an error negates further processing
 void GenericModule::Online()
 {
-   if (m_shipRef->GetPilot()->IsDocked()
-        && !m_shipRef->IsUndocking()
-        && m_shipRef->GetPilot()->IsLogin())
-    {
-        m_ModuleState = Module::State::Online;
-        SetAttribute(AttrOnline, EvilOne, !m_shipRef->GetPilot()->IsLogin());
-        return;
-    }
 
     if (m_ModuleState == Module::State::Unfitted) {
         _log(MODULE__ERROR, "GenericModule::Online() called for unfitted module %u(%s).",itemID(), m_modRef->name());
