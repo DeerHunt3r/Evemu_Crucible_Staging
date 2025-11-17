@@ -63,7 +63,10 @@ m_launcher(false)
 // throwing an error negates further processing
 void GenericModule::Online()
 {
-    if (m_shipRef->GetPilot()->IsDocked() and (!m_shipRef->IsUndocking())) {
+   if (m_shipRef->GetPilot()->IsDocked()
+        && !m_shipRef->IsUndocking()
+        && m_shipRef->GetPilot()->IsLogin())
+    {
         m_ModuleState = Module::State::Online;
         SetAttribute(AttrOnline, EvilOne, !m_shipRef->GetPilot()->IsLogin());
         return;
@@ -151,12 +154,14 @@ void GenericModule::Online()
 
 void GenericModule::Offline()
 {
-    if (m_shipRef->GetPilot()->IsDocked()) {
+    if (m_shipRef->GetPilot()->IsDocked()
+        && !m_shipRef->IsUndocking()
+        && m_shipRef->GetPilot()->IsLogin())
+    {
         m_ModuleState = Module::State::Offline;
-        SetAttribute(AttrOnline, EvilZero, !m_shipRef->IsUndocking());
+        SetAttribute(AttrOnline, EvilZero, false);   // don't spam attribute updates on login restore
         return;
     }
-
     //if (m_shipRef->GetPilot()->GetShipSE()->IsDead()) //  SE->IsDead() for all SEs
     if (m_shipRef->IsPopped())                          // only for player ships
         return;
