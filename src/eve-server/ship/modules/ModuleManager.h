@@ -58,9 +58,10 @@ public:
     void Offline(EVEItemFlags flag);
     void OnlineAll();
     void OfflineAll();
+    // Deactivate all modules without offlining them (do NOT clear AttrOnline)
+    void DeactivateAll();
     void Activate(int32 itemID, uint16 effectID, int32 targetID, int32 repeat);
     void Deactivate(uint32 itemID, std::string effectName);
-    void DeactivateAllModules();
     void Overload(uint32 itemID);
     void DeOverload(uint32 itemID);
     void DamageModule(uint32 itemID, float amount);

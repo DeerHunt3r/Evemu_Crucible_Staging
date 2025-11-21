@@ -91,6 +91,94 @@ PyRep* CalendarDB::SaveNewEvent(uint32 ownerID, Call_CreateEventWithInvites& arg
     return new PyInt(eventID);
 }
 
+
+PyRep* CalendarDB::SaveNewEventManual(
+    uint32 ownerID,
+    int64 startDateTime,
+    PyRep* durationRep,
+    PyRep* importantRep,
+    const std::string& title,
+    const std::string& description,
+    PyList* invitees
+)
+{
+    EvE::TimeParts data = EvE::TimeParts();
+    data = GetTimeParts(startDateTime);
+
+    // ----- duration: can be None or Int -----
+    uint32 duration = 0;
+    bool hasDuration = false;
+    if (durationRep != nullptr && durationRep->IsInt()) {
+        PyInt* d = durationRep->AsInt();
+        duration = d->value();
+        hasDuration = true;
+    }
+
+    // ----- importance: Int or Bool (default 0) -----
+    uint32 important = 0;
+    if (importantRep != nullptr) {
+        if (importantRep->IsInt()) {
+            PyInt* i = importantRep->AsInt();
+            important = i->value();
+        } else if (importantRep->IsBool()) {
+            PyBool* b = importantRep->AsBool();
+            important = b->value() ? 1 : 0;
+        }
+    }
+
+    DBerror err;
+    uint32 eventID(0);
+
+    if (hasDuration) {
+        if (!sDatabase.RunQueryLID(err, eventID,
+            "INSERT INTO sysCalendarEvents(ownerID, creatorID, eventDateTime, eventDuration, importance,"
+            " eventTitle, eventText, flag, month, year)"
+            " VALUES (%u, %u, %lli, %u, %u, '%s', '%s', %u, %u, %u)",
+            ownerID, ownerID, startDateTime, duration, important,
+            title.c_str(), description.c_str(),
+            Calendar::Flag::Personal, data.month, data.year))
+        {
+            codelog(DATABASE__ERROR, "Error in SaveNewEventManual query (with duration): %s", err.c_str());
+            return PyStatic.NewZero();
+        }
+    } else {
+        if (!sDatabase.RunQueryLID(err, eventID,
+            "INSERT INTO sysCalendarEvents(ownerID, creatorID, eventDateTime, importance,"
+            " eventTitle, eventText, flag, month, year)"
+            " VALUES (%u, %u, %lli, %u, '%s', '%s', %u, %u, %u)",
+            ownerID, ownerID, startDateTime, important,
+            title.c_str(), description.c_str(),
+            Calendar::Flag::Personal, data.month, data.year))
+        {
+            codelog(DATABASE__ERROR, "Error in SaveNewEventManual query (no duration): %s", err.c_str());
+            return PyStatic.NewZero();
+        }
+    }
+
+    // ----- invitees (optional) -----
+    if (invitees != nullptr && !invitees->empty()) {
+        DBerror err2;
+
+        PyList::const_iterator itr = invitees->begin(), end = invitees->end();
+        while (itr != end) {
+            PyInt* id = (*itr)->AsInt();
+            if (id != nullptr) {
+                if (!sDatabase.RunQuery(err2,
+                    "INSERT INTO sysCalendarInvitees(`eventID`, `inviteeList`)"
+                    " VALUES (%u, %u)",
+                    eventID, id->value()))
+                {
+                    codelog(DATABASE__ERROR, "Error inserting calendar invitee: %s", err2.c_str());
+                }
+            }
+            ++itr;
+        }
+    }
+
+    return new PyInt(eventID);
+}
+
+
 // for corp/alliance events
 PyRep* CalendarDB::SaveNewEvent(uint32 ownerID, uint32 creatorID, Call_CreateEvent &args)
 {

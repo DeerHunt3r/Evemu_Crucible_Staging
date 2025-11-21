@@ -59,54 +59,93 @@ m_launcher(false)
     _log(MODULE__DEBUG, "Created GenericModule %p for item %s (%u).", this, mRef->name(), mRef->itemID());
 }
 
-// this function must NOT throw
-// throwing an error negates further processing
+
+    // this function must NOT throw
+    // throwing an error negates further processing
+
+
 void GenericModule::Online()
 {
+    // If the module state and AttrOnline got out of sync (e.g. state says Online
+    // but the attribute is 0), heal it by treating the module as Offline so we
+    // can run the full Online logic again.
+    EvilNumber onlineAttr = GetAttribute(AttrOnline);
+    if (m_ModuleState != Module::State::Offline && onlineAttr == EvilZero) {
+        _log(MODULE__MESSAGE,
+             "GenericModule::Online() - state/AttrOnline desync for %u(%s). "
+             "State is %s, AttrOnline is 0. Forcing state to Offline.",
+             itemID(), m_modRef->name(), GetModuleStateName(m_ModuleState));
+        m_ModuleState = Module::State::Offline;
+    }
 
-    if (m_ModuleState == Module::State::Unfitted) {
-        _log(MODULE__ERROR, "GenericModule::Online() called for unfitted module %u(%s).",itemID(), m_modRef->name());
+    // Simple case: we're docked and not in the middle of undocking.  In that
+    // case the client / dogma system has already decided which modules should
+    // be online, so we just mirror that and don't do any fitting checks.
+    if (m_shipRef->GetPilot()->IsDocked() && (!m_shipRef->IsUndocking())) {
+        m_ModuleState = Module::State::Online;
+        SetAttribute(AttrOnline, EvilOne, !m_shipRef->GetPilot()->IsLogin());
         return;
     }
+
+    if (m_ModuleState == Module::State::Unfitted) {
+        _log(MODULE__ERROR,
+             "GenericModule::Online() called for unfitted module %u(%s).",
+             itemID(), m_modRef->name());
+        return;
+    }
+
     if (m_ModuleState != Module::State::Offline) {
-        _log(MODULE__MESSAGE, "GenericModule::Online() called for non-offline module %u(%s).  State is %s", \
-                itemID(), m_modRef->name(), GetModuleStateName(m_ModuleState));
+        _log(MODULE__MESSAGE,
+             "GenericModule::Online() called for non-offline module %u(%s).  State is %s",
+             itemID(), m_modRef->name(), GetModuleStateName(m_ModuleState));
         return;     // already online
     }
 
+    // Too damaged to online.
     if (GetAttribute(AttrDamage) >= GetAttribute(AttrHP)) {
-        m_shipRef->GetPilot()->SendNotifyMsg("Your %s is too damaged to be put online.", m_modRef->name());
+        m_shipRef->GetPilot()->SendNotifyMsg(
+            "Your %s is too damaged to be put online.", m_modRef->name());
         return;
         /*{'messageKey': 'ModuleTooDamagedToBeOnlined', 'dataID': 17878773, 'suppressable': False, 'bodyID': 257752, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 2303}
          *   u'ModuleTooDamagedToBeOnlinedBody'}(u'The module is too damaged to be onlined'
          */
     }
+
     // check PG and CPU usage to see if we have enough to online this module
     EvilNumber cpuNeed(m_shipRef->GetAttribute(AttrCpuLoad) + GetAttribute(AttrCpu));
-    if (cpuNeed  > m_shipRef->GetAttribute(AttrCpuOutput)) {
-        _log(MODULE__TRACE, "GenericModule::Online() %u(%s) - not enough CPU. (%.1f/%.1f)", \
-                itemID(), m_modRef->name(), cpuNeed.get_float(), m_shipRef->GetAttribute(AttrCpuOutput).get_float());
+    if (cpuNeed > m_shipRef->GetAttribute(AttrCpuOutput)) {
+        _log(MODULE__TRACE,
+             "GenericModule::Online() %u(%s) - not enough CPU. (%.1f/%.1f)",
+             itemID(), m_modRef->name(),
+             cpuNeed.get_float(), m_shipRef->GetAttribute(AttrCpuOutput).get_float());
+
         if (!m_shipRef->GetPilot()->IsLogin()) {
             m_modRef->SetOnline(false, isRig());
             float require(GetAttribute(AttrCpu).get_float());
             float total(m_shipRef->GetAttribute(AttrCpuOutput).get_float());
             float remaining(total - m_shipRef->GetAttribute(AttrCpuLoad).get_float());
-            std::string str = "To bring " + m_modRef->itemName() + " online requires %.2f cpu units, ";
+            std::string str = "To bring " + m_modRef->itemName()
+                            + " online requires %.2f cpu units, ";
             str += "but only %.2f of the %.2f units that your computer produces are still available.";
             m_shipRef->GetPilot()->SendNotifyMsg(str.c_str(), require, remaining, total);
         }
         return;
     }
+
     EvilNumber pgNeed(m_shipRef->GetAttribute(AttrPowerLoad) + GetAttribute(AttrPower));
     if (pgNeed > m_shipRef->GetAttribute(AttrPowerOutput)) {
-        _log(MODULE__TRACE, "GenericModule::Online() %u(%s) - not enough PG. (%.1f/%.1f)", \
-                itemID(), m_modRef->name(), pgNeed.get_float(), m_shipRef->GetAttribute(AttrPowerOutput).get_float());
+        _log(MODULE__TRACE,
+             "GenericModule::Online() %u(%s) - not enough PG. (%.1f/%.1f)",
+             itemID(), m_modRef->name(),
+             pgNeed.get_float(), m_shipRef->GetAttribute(AttrPowerOutput).get_float());
+
         if (!m_shipRef->GetPilot()->IsLogin()) {
             m_modRef->SetOnline(false, isRig());
             float require(GetAttribute(AttrPower).get_float());
             float total(m_shipRef->GetAttribute(AttrPowerOutput).get_float());
             float remaining(total - m_shipRef->GetAttribute(AttrPowerLoad).get_float());
-            std::string str = "To bring " + m_modRef->itemName() + " online requires %.2f power units, ";
+            std::string str = "To bring " + m_modRef->itemName()
+                            + " online requires %.2f power units, ";
             str += "but only %.2f of the %.2f units that your power core produces are still available.";
             m_shipRef->GetPilot()->SendNotifyMsg(str.c_str(), require, remaining, total);
         }
@@ -115,25 +154,36 @@ void GenericModule::Online()
 
     m_modRef->SetOnline(true, isRig());
     m_ModuleState = Module::State::Online;
-    _log(MODULE__MESSAGE, "GenericModule::Online() - %u(%s) cpu: %.2f, pg: %.2f, loaded: %s", \
-            itemID(), m_modRef->name(), cpuNeed.get_float(), pgNeed.get_float(), m_ChargeState == Module::State::Loaded?"true":"false");
+    _log(MODULE__MESSAGE,
+         "GenericModule::Online() - %u(%s) cpu: %.2f, pg: %.2f, loaded: %s",
+         itemID(), m_modRef->name(),
+         cpuNeed.get_float(), pgNeed.get_float(),
+         (m_ChargeState == Module::State::Loaded ? "true" : "false"));
 
     ProcessEffects(FX::State::Passive, true);
     ProcessEffects(FX::State::Online, true);
+
     if (m_ChargeState == Module::State::Loaded) {
         if (!m_chargeLoaded) {
-            _log(MODULE__ERROR, "GenericModule::Online() - module %u(%s) has ChargeState(CHG_LOADED) but m_chargeLoaded = false.", \
-                    itemID(), m_modRef->name());
+            _log(MODULE__ERROR,
+                 "GenericModule::Online() - module %u(%s) has ChargeState(CHG_LOADED) but m_chargeLoaded = false.",
+                 itemID(), m_modRef->name());
         } else if (m_chargeRef.get() == nullptr) {
-            _log(MODULE__ERROR, "GenericModule::Online() - module %u(%s) has ChargeState(CHG_LOADED) but m_chargeRef = NULL.", \
-                    itemID(), m_modRef->name());
+            _log(MODULE__ERROR,
+                 "GenericModule::Online() - module %u(%s) has ChargeState(CHG_LOADED) but m_chargeRef = NULL.",
+                 itemID(), m_modRef->name());
         } else {
-            _log(MODULE__MESSAGE, "GenericModule::Online() - module %u(%s) loading charge fx for %s.", itemID(), m_modRef->name(), m_chargeRef->name());
+            _log(MODULE__MESSAGE,
+                 "GenericModule::Online() - module %u(%s) applying charge fx for %s.",
+                 itemID(), m_modRef->name(), m_chargeRef->name());
             for (auto it : m_chargeRef->type().m_stateFxMap) {
-                fxData data = fxData();
+                fxData data;
                 data.action = FX::Action::Invalid;
                 data.srcRef = m_chargeRef;
-                sFxProc.ParseExpression(m_modRef.get(), sFxDataMgr.GetExpression(it.second.preExpression), data, this);
+                sFxProc.ParseExpression(
+                    m_modRef.get(),
+                    sFxDataMgr.GetExpression(it.second.preExpression),
+                    data, this);
             }
         }
     }
@@ -141,42 +191,58 @@ void GenericModule::Online()
     // update available ship resources.
     m_shipRef->SetAttribute(AttrCpuLoad, cpuNeed, !m_shipRef->IsUndocking());
     m_shipRef->SetAttribute(AttrPowerLoad, pgNeed, !m_shipRef->IsUndocking());
-    sFxProc.ApplyEffects(m_modRef.get(), m_shipRef->GetPilot()->GetChar().get(), m_shipRef.get(), !m_shipRef->IsUndocking());
+    sFxProc.ApplyEffects(
+        m_modRef.get(),
+        m_shipRef->GetPilot()->GetChar().get(),
+        m_shipRef.get(),
+        !m_shipRef->IsUndocking());
 }
-
+    
 void GenericModule::Offline()
 {
-    if (m_shipRef->GetPilot()->IsDocked()
-        && !m_shipRef->IsUndocking()
-        && m_shipRef->GetPilot()->IsLogin())
-    {
+    // When docked we just flip the attribute/state and exit.  CPU/PG bookkeeping
+    // is handled on undock when modules are re-applied.
+    if (m_shipRef->GetPilot()->IsDocked()) {
+        EvilNumber onlineAttr = GetAttribute(AttrOnline);
+        _log(MODULE__MESSAGE,
+             "GenericModule::Offline() - docking/offline for %u(%s); AttrOnline was %.0f.",
+             itemID(), m_modRef->name(), onlineAttr.get_float());
+
         m_ModuleState = Module::State::Offline;
-        SetAttribute(AttrOnline, EvilZero, false);   // don't spam attribute updates on login restore
+        SetAttribute(AttrOnline, EvilZero, !m_shipRef->IsUndocking());
         return;
     }
+
     //if (m_shipRef->GetPilot()->GetShipSE()->IsDead()) //  SE->IsDead() for all SEs
     if (m_shipRef->IsPopped())                          // only for player ships
         return;
 
-    switch(m_ModuleState) {
+    switch (m_ModuleState) {
         case Module::State::Unfitted: {
             m_modRef->SetOnline(false, isRig());
-            _log(MODULE__WARNING, "GenericModule::Offline() called for unfitted module %u(%s).",itemID(), m_modRef->name());
+            _log(MODULE__WARNING,
+                 "GenericModule::Offline() called for unfitted module %u(%s).",
+                 itemID(), m_modRef->name());
             return;
         } break;
         case Module::State::Offline: {
             m_modRef->SetOnline(false, isRig());
-            _log(MODULE__WARNING, "GenericModule::Offline() called for offline module %u(%s).",itemID(), m_modRef->name());
+            _log(MODULE__WARNING,
+                 "GenericModule::Offline() called for offline module %u(%s).",
+                 itemID(), m_modRef->name());
             return;
         } break;
-        // these two should only be called for activeModules...
         case Module::State::Deactivating: {
-            _log(MODULE__MESSAGE, "GenericModule::Offline() called for deactivating module %u(%s).",itemID(), m_modRef->name());
+            _log(MODULE__MESSAGE,
+                 "GenericModule::Offline() called for deactivating module %u(%s).",
+                 itemID(), m_modRef->name());
             if (IsActiveModule())
                 GetActiveModule()->AbortCycle();
         } break;
         case Module::State::Activated: {
-            _log(MODULE__MESSAGE, "GenericModule::Offline() called for active module %u(%s).",itemID(), m_modRef->name());
+            _log(MODULE__MESSAGE,
+                 "GenericModule::Offline() called for active module %u(%s).",
+                 itemID(), m_modRef->name());
             if (IsActiveModule())
                 GetActiveModule()->AbortCycle();
         } break;
@@ -190,29 +256,40 @@ void GenericModule::Offline()
     m_shipRef->SetAttribute(AttrCpuLoad, cpuNeed);
     m_shipRef->SetAttribute(AttrPowerLoad, pgNeed);
 
-    _log(MODULE__MESSAGE, "GenericModule::Offline() - %u(%s) cpu: %.2f, pg: %.2f",itemID(), m_modRef->name(), cpuNeed.get_float(), pgNeed.get_float());
+    _log(MODULE__MESSAGE,
+         "GenericModule::Offline() - %u(%s) cpu: %.2f, pg: %.2f",
+         itemID(), m_modRef->name(), cpuNeed.get_float(), pgNeed.get_float());
 
     if (m_ChargeState == Module::State::Loaded) {
         if (m_chargeRef.get() == nullptr) {
-            _log(MODULE__ERROR, "GenericModule::Offline() - module %u(%s) has ChargeState(CHG_LOADED) but m_chargeRef = NULL.", \
-                    itemID(), m_modRef->name());
+            _log(MODULE__ERROR,
+                 "GenericModule::Offline() - module %u(%s) has ChargeState(CHG_LOADED) but m_chargeRef = NULL.",
+                 itemID(), m_modRef->name());
         } else {
             for (auto it : m_chargeRef->type().m_stateFxMap) {
-                fxData data = fxData();
+                fxData data;
                 data.action = FX::Action::Invalid;
                 data.srcRef = m_chargeRef;
-                sFxProc.ParseExpression(m_modRef.get(), sFxDataMgr.GetExpression(it.second.postExpression), data, this);
+                sFxProc.ParseExpression(
+                    m_modRef.get(),
+                    sFxDataMgr.GetExpression(it.second.postExpression),
+                    data, this);
             }
         }
     }
 
     ProcessEffects(FX::State::Passive, false);
     ProcessEffects(FX::State::Online, false);
-    sFxProc.ApplyEffects(m_modRef.get(), m_shipRef->GetPilot()->GetChar().get(), m_shipRef.get(), true);
+    sFxProc.ApplyEffects(
+        m_modRef.get(),
+        m_shipRef->GetPilot()->GetChar().get(),
+        m_shipRef.get(),
+        true);
 
     m_ModuleState = Module::State::Offline;
     m_modRef->SetOnline(false, isRig());
 }
+
 
 void GenericModule::Overload()
 {

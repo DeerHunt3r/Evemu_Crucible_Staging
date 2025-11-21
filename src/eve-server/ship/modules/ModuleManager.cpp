@@ -162,19 +162,25 @@ bool ModuleManager::Initialize() {
 
 void ModuleManager::LoadOnline() {
     // must proc modules in order of (subsys -> rig -> low -> mid -> high) for proper fx application
-    // online subsystems, then rigs before hi,mid,lo slots
+
+    // First: subsystems and rigs (stored in m_systems, reverse-iterated so we hit
+    // subsystems and rigs before the normal fitting racks)
     std::map<uint8, GenericModule*>::reverse_iterator ritr = m_systems.rbegin(), rend = m_systems.rend();
     while (ritr != rend) {
         if (ritr->second != nullptr)
             ritr->second->Online();
         ++ritr;
     }
-    // process lo,mid,hi slots in that order.
+
+    // Then: fitting racks (low, mid, high) in the order stored in m_fittings.
+    // Only call Online() for modules that have AttrOnline = true, so we restore
+    // the previously-online modules only.
     std::map<uint8, GenericModule*>::iterator itr = m_fittings.begin(), end = m_fittings.end();
     while (itr != end) {
-        if (itr->second != nullptr)
+        if (itr->second != nullptr) {
             if (itr->second->GetAttribute(AttrOnline).get_bool())
                 itr->second->Online();
+        }
         ++itr;
     }
 }
@@ -652,12 +658,23 @@ void ModuleManager::OfflineAll()
             cur.second->Offline();
 }
 
-void ModuleManager::DeactivateAllModules()
+void ModuleManager::DeactivateAll()
 {
-    for (auto cur : m_modules)
-        if (cur.second != nullptr)
-            cur.second->Deactivate();
+    // Deactivate all fitted modules (rigs + hi/mid/low)
+    std::map<uint8, GenericModule*>::iterator itr = m_fittings.begin(), end = m_fittings.end();
+    for (; itr != end; ++itr) {
+        if (itr->second != nullptr)
+            itr->second->Deactivate();
+    }
+
+    // Deactivate all subsystems (if any)
+    std::map<uint8, GenericModule*>::iterator sitr = m_systems.begin(), send = m_systems.end();
+    for (; sitr != send; ++sitr) {
+        if (sitr->second != nullptr)
+            sitr->second->Deactivate();
+    }
 }
+
 
 void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int32 repeat)
 {

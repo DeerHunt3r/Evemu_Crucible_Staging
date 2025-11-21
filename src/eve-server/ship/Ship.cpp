@@ -362,7 +362,7 @@ void ShipItem::Eject()
 void ShipItem::Dock() {
     m_isDocking = true;
 
-    m_ModuleManager->DeactivateAllModules();
+    m_ModuleManager->DeactivateAll();
     m_onlineModuleVec.clear();
     // remove ship effects and char skill effects for docking.
     ProcessEffects();
@@ -372,8 +372,11 @@ void ShipItem::Undock() {
     m_isUndocking = true;
 
     //HorribleFittingProblems
-
-    ResetEffects();
+    // Rebuild ship + module effects for undocking without clearing AttrOnline
+    // or offlining modules. This lets LoadOnline() use the saved online state.
+   
+    ProcessEffects(true, true/*sDataMgr.IsSolarSystem(locationID())*/);
+   
     //ProcessEffects(true, true);
 
     // horrible hack to set charge qty in fit window
@@ -1838,22 +1841,26 @@ void ShipItem::ProcessShipEffects(bool update/*false*/)
         sFxProc.ParseExpression(this, sFxDataMgr.GetExpression(it.second.preExpression), data);
     }
 
+    // On both undock and login/board, trust the persisted AttrOnline flags
+    // to decide which modules should be online. This keeps modules that were
+    // online in station online in space, and leaves offline modules offline.
     if (m_isUndocking) {
-        // online modules sent from client (these are onlined in fit window while docked)
-        m_ModuleManager->UpdateModules(m_onlineModuleVec);
-        m_onlineModuleVec.clear();
-        //FailedToOnlineModulesOnUndock
-    } else {
-        // this will set module to last saved online state in the case of BoardShip() and Login()
-        m_ModuleManager->LoadOnline();
+        _log(MODULE__INFO,
+             "ShipItem::ProcessShipEffects() - Undocking; loading modules from saved AttrOnline state.");
+        m_isUndocking = false;
     }
+
+    // On undock / login / board, always trust the persisted AttrOnline flags
+    // to decide what should be online. This keeps station vs space in sync.
+    m_ModuleManager->LoadOnline();
+    m_onlineModuleVec.clear();
 
     // apply processed effects
     sFxProc.ApplyEffects(this, m_pilot->GetChar().get(), this, update);
     //ClearModifiers();
 }
-
-void ShipItem::ClearModuleModifiers()
+  
+    void ShipItem::ClearModuleModifiers()
 {
     _log(EFFECTS__TRACE, "ShipItem::ClearModuleModifiers()");
     //m_ModuleManager->OfflineAll();
@@ -1871,7 +1878,7 @@ void ShipItem::ResetEffects() {
     _log(EFFECTS__TRACE, "ShipItem::ResetEffects()");
     double start = GetTimeMSeconds();
 
-    m_ModuleManager->OfflineAll();
+    m_ModuleManager->DeactivateAll(); 
 
     // reset attributes on char, ship, all modules and charges
     pAttributeMap->SaveShipState();      // save ship damage as it's removed on next call
@@ -1892,7 +1899,7 @@ void ShipItem::ResetEffects() {
 
 void ShipItem::PrepForUndock() {
     //  "Offline" modules (see notes in GM::Online and GM::Offline
-    m_ModuleManager->OfflineAll();
+    m_ModuleManager->DeactivateAll();
     // clear fx maps before undock
     ProcessEffects();
 }

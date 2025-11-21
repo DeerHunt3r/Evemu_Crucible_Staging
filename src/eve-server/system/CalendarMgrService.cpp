@@ -74,25 +74,61 @@ PyResult CalendarMgrService::SendEventResponse(PyCallArgs& call, PyInt* eventID,
     return nullptr;
 }
 
-PyResult CalendarMgrService::CreatePersonalEvent(PyCallArgs& call, PyLong* dateTime, PyInt* duration, PyWString* title, PyWString* description, PyRep* important, PyList* invitees)
+PyResult CalendarMgrService::CreatePersonalEvent(PyCallArgs& call,
+                                                 PyLong* dateTime,
+                                                 PyRep* duration,
+                                                 PyWString* title,
+                                                 PyRep* description,
+                                                 PyRep* important,
+                                                 PyList* invitees)
 {
     // newEventID = self.calendarMgr.CreatePersonalEvent(dateTime, duration, title, description, important, invitees)
 
-    sLog.Cyan( "CalendarMgrService::Handle_CreatePersonalEvent()", "size=%lu", call.tuple->size());
+    sLog.Cyan("CalendarMgrService::Handle_CreatePersonalEvent()", "size=%lu", call.tuple->size());
     call.Dump(SERVICE__CALL_DUMP);
 
-    // TODO: update this to not use xmlpktgen, too many changes just for the services update
-    Call_CreateEventWithInvites args;
-    if (!args.Decode(&call.tuple)) {
-        codelog(SERVICE__ERROR, "%s: Failed to decode arguments.", GetName());
+    if ((dateTime == nullptr) || (title == nullptr)) {
+        codelog(SERVICE__ERROR, "%s: Missing required args for CreatePersonalEvent.", GetName());
         return PyStatic.NewNone();
     }
 
-    // returns eventID
-    return CalendarDB::SaveNewEvent(call.client->GetCharacterID(), args);
+    // ----- startDateTime -----
+    int64 startDateTime = dateTime->value();
+
+    // ----- title: PyWString -> std::string (content() already returns std::string) -----
+    std::string titleStr = title->content();
+
+    // ----- description: may be None, PyString, or PyWString -----
+    std::string descStr;
+    if (description != nullptr) {
+        if (description->IsWString()) {
+            PyWString* ws = description->AsWString();
+            descStr = ws->content();           // std::string
+        } else if (description->IsString()) {
+            PyString* s = description->AsString();
+            descStr = s->content();            // std::string
+        } else {
+            // None or some other type – treat as empty, but log for debugging
+            sLog.Error("CalendarMgrService::CreatePersonalEvent",
+                       "Unexpected description type for calendar event; defaulting to empty string.");
+        }
+    }
+    // If description is nullptr or None, descStr stays ""
+
+    // ----- hand off to DB helper -----
+    return CalendarDB::SaveNewEventManual(
+        call.client->GetCharacterID(),
+        startDateTime,
+        duration,
+        important,
+        titleStr,
+        descStr,
+        invitees
+    );
 }
 
-PyResult CalendarMgrService::CreateCorporationEvent(PyCallArgs& call, PyLong* dateTime, PyInt* duration, PyWString* title, PyWString* description, PyRep* important)
+
+PyResult CalendarMgrService::CreateCorporationEvent(PyCallArgs& call, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important)
 {
     // TODO: update this to not use xmlpktgen, too many changes just for the services update
     Call_CreateEvent args;
@@ -105,7 +141,7 @@ PyResult CalendarMgrService::CreateCorporationEvent(PyCallArgs& call, PyLong* da
     return CalendarDB::SaveNewEvent(call.client->GetCorporationID(), call.client->GetCharacterID(), args);
 }
 
-PyResult CalendarMgrService::CreateAllianceEvent(PyCallArgs& call, PyLong* dateTime, PyInt* duration, PyWString* title, PyWString* description, PyRep* important)
+PyResult CalendarMgrService::CreateAllianceEvent(PyCallArgs& call, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important)
 {
     // TODO: update this to not use xmlpktgen, too many changes just for the services update
     Call_CreateEvent args;
@@ -118,9 +154,10 @@ PyResult CalendarMgrService::CreateAllianceEvent(PyCallArgs& call, PyLong* dateT
     return CalendarDB::SaveNewEvent(call.client->GetAllianceID(), call.client->GetCharacterID(), args);
 }
 
-PyResult CalendarMgrService::EditPersonalEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyInt* duration, PyWString* title, PyWString* description, PyRep* important)
+PyResult CalendarMgrService::EditPersonalEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important)
 {
-    //self.calendarMgr.EditPersonalEvent(eventID, oldDateTime, dateTime, duration, title, description, important)
+
+//self.calendarMgr.EditPersonalEvent(eventID, oldDateTime, dateTime, duration, title, description, important)
 
     sLog.Cyan( "CalendarMgrService::Handle_EditPersonalEvent()", "size=%lu", call.tuple->size());
     call.Dump(SERVICE__CALL_DUMP);
@@ -128,7 +165,7 @@ PyResult CalendarMgrService::EditPersonalEvent(PyCallArgs& call, PyInt* eventID,
     return nullptr;
 }
 
-PyResult CalendarMgrService::EditCorporationEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyInt* duration, PyWString* title, PyWString* description, PyRep* important)
+PyResult CalendarMgrService::EditCorporationEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important)
 {
     // self.calendarMgr.EditCorporationEvent(eventID, oldDateTime, dateTime, duration, title, description, important)
 
@@ -138,7 +175,7 @@ PyResult CalendarMgrService::EditCorporationEvent(PyCallArgs& call, PyInt* event
     return nullptr;
 }
 
-PyResult CalendarMgrService::EditAllianceEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyInt* duration, PyWString* title, PyWString* description, PyRep* important)
+PyResult CalendarMgrService::EditAllianceEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important)
 {
     //self.calendarMgr.EditAllianceEvent(eventID, oldDateTime, dateTime, duration, title, description, important)
 

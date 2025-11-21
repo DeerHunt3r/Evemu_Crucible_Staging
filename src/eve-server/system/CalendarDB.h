@@ -24,6 +24,18 @@ class CalendarDB {
 
       static PyRep* SaveNewEvent(uint32 ownerID, Call_CreateEventWithInvites &args);
       static PyRep* SaveNewEvent(uint32 ownerID, uint32 creatorID, Call_CreateEvent &args);
+     
+      static PyRep* SaveNewEventManual(
+          uint32 ownerID,
+          int64 startDateTime,
+          PyRep* durationRep,
+          PyRep* importantRep,
+          const std::string& title,
+          const std::string& description,
+          PyList* invitees
+      );
+
+     
       static PyRep* GetEventList(uint32 ownerID, uint32 month, uint32 year);
       static PyRep* GetEventDetails(uint32 eventID);
 
