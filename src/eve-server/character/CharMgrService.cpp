@@ -134,7 +134,18 @@ CharMgrService::CharMgrService(EVEServiceManager& mgr) :
     this->Add("SetCharacterDescription", &CharMgrService::SetCharacterDescription);
     this->Add("GetPaperdollState", &CharMgrService::GetPaperdollState);
     this->Add("GetNote", &CharMgrService::GetNote);
-    this->Add("SetNote", &CharMgrService::SetNote);
+
+    // SetNote overloads: ASCII and Unicode
+    this->Add(
+        "SetNote",
+        static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyInt*, PyString*)>(
+            &CharMgrService::SetNote));
+    this->Add(
+        "SetNote",
+        static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyInt*, PyWString*)>(
+            &CharMgrService::SetNote));
+
+
     // Notepad / owner notes
     this->Add("AddOwnerNote",
         static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyString*, PyWString*)>(
@@ -171,9 +182,26 @@ this->Add("EditOwnerNote",
    
 
     this->Add("RemoveOwnerNote", &CharMgrService::RemoveOwnerNote);
+
+
+    // NEW: AddContact(characterID) – matches client sending (PyInt*)
+    this->Add("AddContact",
+        static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyInt*)>(
+            &CharMgrService::AddContact));
     this->Add("AddContact", static_cast <PyResult(CharMgrService::*)(PyCallArgs&, PyInt*, PyInt*, PyInt*, PyInt*, std::optional<PyString*>)> (&CharMgrService::AddContact));
+    // NEW: AddContact(characterID, standing:int, watchlist:int, notify:int, note:wstring)
+    this->Add(
+        "AddContact",
+        static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyInt*, PyInt*, PyInt*, PyInt*, std::optional<PyWString*>)>(
+            &CharMgrService::AddContact));
+
     this->Add("AddContact", static_cast <PyResult(CharMgrService::*)(PyCallArgs&, PyInt*, PyFloat*, PyInt*, PyBool*, std::optional<PyWString*>)> (&CharMgrService::AddContact));
     this->Add("EditContact", static_cast <PyResult(CharMgrService::*)(PyCallArgs&, PyInt*, PyInt*, PyInt*, PyInt*, std::optional<PyString*>)> (&CharMgrService::EditContact));
+    // NEW: EditContact(characterID, standing:float, watchlist:int, notify:int, note:wstring)
+    this->Add("EditContact",
+        static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyInt*, PyFloat*, PyInt*, PyInt*, std::optional<PyWString*>)>(
+            &CharMgrService::EditContact));
+
     this->Add("EditContact", static_cast <PyResult(CharMgrService::*)(PyCallArgs&, PyInt*, PyFloat*, PyInt*, PyBool*, std::optional<PyWString*>)> (&CharMgrService::EditContact));
     this->Add("DeleteContacts", &CharMgrService::DeleteContacts);
     this->Add("GetRecentShipKillsAndLosses", &CharMgrService::GetRecentShipKillsAndLosses);
@@ -183,7 +211,17 @@ this->Add("EditOwnerNote",
     this->Add("GetImageServerLink", &CharMgrService::GetImageServerLink);
     //these 2 are for labels in PnP window;
     this->Add("GetLabels", &CharMgrService::GetLabels);
-    this->Add("CreateLabel", &CharMgrService::CreateLabel);
+    // CreateLabel() – legacy / no-arg
+    this->Add(
+        "CreateLabel",
+        static_cast<PyResult (CharMgrService::*)(PyCallArgs&)>(
+            &CharMgrService::CreateLabel));
+
+    // NEW: CreateLabel(name:wstring, color:None)
+    this->Add(
+        "CreateLabel",
+        static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyWString*, PyNone*)>(
+            &CharMgrService::CreateLabel));
 }
 
 BoundDispatcher* CharMgrService::BindObject(Client *client, PyRep* bindParameters) {
@@ -226,8 +264,43 @@ PyResult CharMgrService::GetTopBounties(PyCallArgs& call)
 
 PyResult CharMgrService::GetLabels(PyCallArgs& call)
 {
-    return m_db.GetLabels(call.client->GetCharacterID());
+    // TODO: Proper label support.
+    // For now, return an empty dict so the client UI can
+    // safely call .itervalues() and get nothing.
+    PyDict* labels = new PyDict();
+
+    // Optional debug:
+    // sLog.Warning("CharMgrService::GetLabels", "Returning %u labels (stub)", labels->size());
+
+    return labels;
 }
+
+// NEW: legacy no-arg version, keep it doing nothing
+PyResult CharMgrService::CreateLabel(PyCallArgs& call)
+{
+    sLog.Warning("CharMgrService::CreateLabel", "Called legacy CreateLabel() with no arguments");
+    return PyStatic.NewNone();
+}
+
+// NEW: Unicode label name + color (currently None)
+PyResult CharMgrService::CreateLabel(PyCallArgs& call, PyWString* name, PyNone* color)
+{
+    const uint32 ownerID = call.client->GetCharacterID();
+    const std::string narrowName = name->content();  
+
+   sLog.Warning(
+    "CharMgrService::CreateLabel",
+    "CreateLabel called for char %u: name='%s'",
+    ownerID,
+    narrowName.c_str()
+);
+
+    // TODO: when ready, persist labels in DB here, e.g.:
+    // m_db.CreateLabel(ownerID, narrowName, /*color*/ 0);
+
+    return PyStatic.NewNone();
+}
+
 
 PyResult CharMgrService::GetPaperdollState(PyCallArgs& call)
 {
@@ -526,24 +599,13 @@ PyResult CharMgrService::SetNote(PyCallArgs &call, PyInt* itemID, PyString* note
     return PyStatic.NewNone();
 }
 
-// Helper: lossy narrow from wstring to std::string (ASCII only)
-static inline std::string _NarrowLossy(const std::wstring& w)
+// NEW: Unicode version used by the Crucible client
+PyResult CharMgrService::SetNote(PyCallArgs &call, PyInt* itemID, PyWString* note)
 {
-    std::string out;
-    out.reserve(w.size());
-    for (wchar_t ch : w) {
-        out.push_back(ch < 0x80 ? char(ch) : '?');
-    }
-    return out;
+    const std::string narrow = note->content();
+    m_db.SetNote(call.client->GetCharacterID(), itemID->value(), narrow.c_str());
+    return PyStatic.NewNone();
 }
-
-static inline std::string _NarrowLossy(const std::string& s)
-{
-    // content() from PyWString / PyString in this fork already returns std::string,
-    // so we don’t need to convert — just return it as-is.
-    return s;
-}
-
 
 // Unified AddOwnerNote that accepts any mix of (PyString / PyWString)
 // and figures out which argument is the label ("S:..." or "N:...") and
@@ -569,7 +631,8 @@ PyResult CharMgrService::AddOwnerNote(PyCallArgs& call)
         if (auto* s = dynamic_cast<PyString*>(r))
             return s->content();
         if (auto* w = dynamic_cast<PyWString*>(r))
-            return _NarrowLossy(w->content());
+        return w->content();
+
         return std::string();
     };
 
@@ -803,6 +866,29 @@ PyResult CharMgrService::GetOwnerNoteLabels(PyCallArgs &call)
 //18:07:30 L CharMgrService::Handle_AddContact(): size=1, 0=Integer(2784)
 //18:07:35 L CharMgrService::Handle_AddContact(): size=1, 0=Integer(63177)
 
+// NEW: simple AddContact(characterID) overload to match client call (PyInt*)
+PyResult CharMgrService::AddContact(PyCallArgs& call, PyInt* characterID)
+{
+    sLog.Warning("CharMgrService::Handle_AddContact(single)", "size=%lu",
+                 call.tuple ? call.tuple->size() : 0);
+    call.Dump(CHARACTER__DEBUG);
+
+    // Defaults: neutral standing, not in watchlist
+    const double standing   = 0.0;
+    const int    inWatchlist = 0;
+
+    // ownerID = current character
+    const uint32 ownerID = call.client->GetCharacterID();
+
+    // Underlying DB helper already used by the other overloads
+    m_db.AddContact(ownerID, characterID->value(), standing, inWatchlist);
+
+    // Nothing special to return
+    return PyStatic.NewNone();
+}
+
+
+
 PyResult CharMgrService::AddContact(PyCallArgs& call, PyInt* characterID, PyInt* standing, PyInt* inWatchlist, PyInt* notify, std::optional<PyString*> note)
 {
   sLog.Warning( "CharMgrService::Handle_AddContact()", "size=%lu", call.tuple->size());
@@ -814,6 +900,20 @@ PyResult CharMgrService::AddContact(PyCallArgs& call, PyInt* characterID, PyInt*
 
   return nullptr;
 }
+
+// NEW: all-int + Unicode note
+PyResult CharMgrService::AddContact(PyCallArgs& call, PyInt* characterID, PyInt* standing,
+                                    PyInt* inWatchlist, PyInt* notify,
+                                    std::optional<PyWString*> note)
+{
+    sLog.Warning("CharMgrService::Handle_AddContact(wstring)", "size=%lu", call.tuple->size());
+    call.Dump(CHARACTER__DEBUG);
+
+    m_db.AddContact(call.client->GetCharacterID(), characterID->value(),
+                    standing->value(), inWatchlist->value());
+    return nullptr;
+}
+
 
 PyResult CharMgrService::AddContact(PyCallArgs& call, PyInt* characterID, PyFloat* standing, PyInt* inWatchlist, PyBool* notify, std::optional<PyWString*> note)
 {
@@ -836,20 +936,26 @@ PyResult CharMgrService::EditContact(PyCallArgs& call, PyInt* characterID, PyInt
   return nullptr;
 }
 
+// NEW: float standing, int notify, Unicode note
+PyResult CharMgrService::EditContact(PyCallArgs& call, PyInt* characterID,
+                                     PyFloat* standing, PyInt* inWatchlist,
+                                     PyInt* notify, std::optional<PyWString*> note)
+{
+    sLog.Warning("CharMgrService::Handle_EditContact(wstring,intnotify)",
+                 "size=%lu", call.tuple->size());
+    call.Dump(CHARACTER__DEBUG);
+
+    // For now, same behavior: update standing and ignore watchlist/notify/note.
+    m_db.UpdateContact(standing->value(), characterID->value(), call.client->GetCharacterID());
+    return nullptr;
+}
+
 PyResult CharMgrService::EditContact(PyCallArgs& call, PyInt* characterID, PyFloat* standing, PyInt* inWatchlist, PyBool* notify, std::optional<PyWString*> note)
 {
   sLog.Warning( "CharMgrService::Handle_EditContact()", "size=%lu", call.tuple->size());
   call.Dump(CHARACTER__DEBUG);
 
   m_db.UpdateContact(standing->value(), characterID->value(), call.client->GetCharacterID());
-  return nullptr;
-}
-
-PyResult CharMgrService::CreateLabel(PyCallArgs& call)
-{
-  sLog.Warning( "CharMgrService::Handle_CreateLabel()", "size=%lu", call.tuple->size());
-  call.Dump(CHARACTER__DEBUG);
-
   return nullptr;
 }
 

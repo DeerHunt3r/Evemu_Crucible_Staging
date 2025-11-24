@@ -83,13 +83,41 @@ protected:
     PyResult GetPaperdollState(PyCallArgs& call);
     PyResult GetNote(PyCallArgs& call, PyInt* itemID);
     PyResult SetNote(PyCallArgs& call, PyInt* itemID, PyString* note);
-    PyResult AddContact(PyCallArgs& call, PyInt* characterID, PyInt* standing, PyInt* inWatchlist, PyInt* notify, std::optional<PyString*> note);
-    PyResult AddContact(PyCallArgs& call, PyInt* characterID, PyFloat* standing, PyInt* inWatchlist, PyBool* notify, std::optional<PyWString*> note);
+
+    // NEW: handle Unicode notes from the client
+    PyResult SetNote(PyCallArgs& call, PyInt* itemID, PyWString* note);
+    // NEW: simple AddContact(characterID) overload to match client call (PyInt*)
+   // AddContact overloads
+    PyResult AddContact(PyCallArgs& call, PyInt* characterID); // simple form
+
+    // All-int path with ASCII note
+    PyResult AddContact(PyCallArgs& call, PyInt* characterID, PyInt* standing,
+                        PyInt* inWatchlist, PyInt* notify,
+                        std::optional<PyString*> note);
+
+    // NEW: all-int path with Unicode note
+    PyResult AddContact(PyCallArgs& call, PyInt* characterID, PyInt* standing,
+                        PyInt* inWatchlist, PyInt* notify,
+                        std::optional<PyWString*> note);
+
+    // Float/bool path (already existed)
+    PyResult AddContact(PyCallArgs& call, PyInt* characterID, PyFloat* standing,
+                        PyInt* inWatchlist, PyBool* notify,
+                        std::optional<PyWString*> note);
+  
+  
     PyResult EditContact(PyCallArgs& call, PyInt* characterID, PyInt* standing, PyInt* inWatchlist, PyInt* notify, std::optional<PyString*> note);
+    // NEW: float standing, int notify, Unicode note
+    PyResult EditContact(PyCallArgs& call, PyInt* characterID, PyFloat* standing,
+                         PyInt* inWatchlist, PyInt* notify,
+                         std::optional<PyWString*> note);
+
     PyResult EditContact(PyCallArgs& call, PyInt* characterID, PyFloat* standing, PyInt* inWatchlist, PyBool* notify, std::optional<PyWString*> note);
     PyResult GetRecentShipKillsAndLosses(PyCallArgs& call, PyInt* num, std::optional<PyInt*> startIndex);
     PyResult GetLabels(PyCallArgs& call);
     PyResult CreateLabel(PyCallArgs& call);
+    // NEW: CreateLabel(name, color)
+    PyResult CreateLabel(PyCallArgs& call, PyWString* name, PyNone* color);
     PyResult DeleteContacts(PyCallArgs& call, PyList* contactIDs);
     PyResult BlockOwners(PyCallArgs& call, PyList* ownerIDs);
     PyResult UnblockOwners(PyCallArgs& call, PyList* ownerIDs);
