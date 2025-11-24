@@ -1177,6 +1177,13 @@ void SystemBubble::BubblecastDestinyEvent( PyTuple** payload, const char* desc )
     }
 }
 
+void SystemBubble::IncludePoint(const GPoint& pt)
+{
+    const double d = m_center.distance(pt);
+    if (d > m_radius)
+        m_radius = d;
+}
+
 void SystemBubble::BubblecastSendNotification(const char* notifyType, const char* idType, PyTuple** payload, bool seq)
 {
     for (auto cur : m_players) {
@@ -1184,12 +1191,5 @@ void SystemBubble::BubblecastSendNotification(const char* notifyType, const char
         PyIncRef(*payload);
         cur.second->SendNotification( notifyType, idType, payload, seq );
     }
-
-void SystemBubble::IncludePoint(const GPoint& pt)
-{
-    const double d = m_center.distance(pt);
-    if (d > m_radius)
-        m_radius = d;
-}
 
 }

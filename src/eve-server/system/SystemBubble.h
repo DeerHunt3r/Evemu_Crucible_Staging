@@ -113,6 +113,8 @@ public:
     void RemoveExclusive(SystemEntity* pSE);
     void AddBallExclusive(SystemEntity* about_who);
 
+    void IncludePoint(const GPoint& pt); 
+
     //send a set of destiny events and updates to every client in the bubble.
     void BubblecastDestiny(std::vector<PyTuple*> &updates, std::vector<PyTuple*> &events, const char* desc) const;
     //send a set of destiny updates to every client in the bubble.
@@ -173,7 +175,7 @@ public:
 
 protected:
     const GPoint m_center;
-    const double m_radius;
+    double m_radius;
 
     // remove all balls in bubble for this SE
     void RemoveBall(SystemEntity* about_who);
@@ -202,8 +204,6 @@ private:
     std::map<uint32, SystemEntity*> m_dynamicEntities;  //entities which may/may not move. we do not own these.
     std::map<uint32, SystemEntity*> m_entities;         //we do not own these.
     std::map<uint32, DroneSE*> m_drones;                //we do not own these.
-
-    void IncludePoint(const GPoint& pt);
     
     // for spawn system     -allan 15July15
     Timer m_spawnTimer;
