@@ -268,26 +268,46 @@ SystemBubble* BubbleManager::GetBubble(SystemManager* sysMgr, const GPoint& pos)
 }
 
 SystemBubble* BubbleManager::MakeBubble(SystemManager* sysMgr, GPoint pos) {
-    // determine if new center (pos) is within 2x radius of another bubble center. (overlap)
+    // Try to reuse or merge with an existing bubble.
+    SystemBubble* mergeCandidate = nullptr;
+    double bestDist = 0.0;
+
     auto range = m_sysBubbleMap.equal_range(sysMgr->GetID());
-    for ( auto itr = range.first; itr != range.second; ++itr )
-        if (itr->second->IsOverlap(pos)) {
-            GVector dir(itr->second->GetCenter(), pos);
-            dir.normalize();
-            _log(DESTINY__BUBBLE_DEBUG, "BubbleManager::MakeBubble()::IsOverlap() - dir: %.3f,%.3f,%.3f", dir.x, dir.y, dir.z);
-            // move pos away from center
-            pos = itr->second->GetCenter() + (dir * (BUBBLE_RADIUS_METERS * 2));
-            break;
+    for (auto itr = range.first; itr != range.second; ++itr) {
+        SystemBubble* existing = itr->second;
+        const double d = existing->GetCenter().distance(pos);
+
+        // Within 2 radii? Treat as same grid.
+        if (d < (BUBBLE_RADIUS_METERS * 2.0)) {
+            if (!mergeCandidate || d < bestDist) {
+                mergeCandidate = existing;
+                bestDist = d;
+            }
+        }
+    }
+
+    if (mergeCandidate != nullptr) {
+        if (is_log_enabled(DESTINY__BUBBLE_DEBUG)) {
+            _log(DESTINY__BUBBLE_DEBUG,
+                 "BubbleManager::MakeBubble() - Reusing bubble %u for (%.1f,%.1f,%.1f), dist=%.1f",
+                 mergeCandidate->GetID(), pos.x, pos.y, pos.z, bestDist);
         }
 
+        mergeCandidate->IncludePoint(pos);
+        return mergeCandidate;
+    }
+
+    // Otherwise create new bubble.
     SystemBubble* pBubble = new SystemBubble(sysMgr, pos, BUBBLE_RADIUS_METERS);
     if (pBubble != nullptr) {
         m_bubbles.push_back(pBubble);
         m_bubbleIDMap.emplace(pBubble->GetID(), pBubble);
         m_sysBubbleMap.emplace(sysMgr->GetID(), pBubble);
+
         if (sConfig.debug.BubbleTrack)
             pBubble->MarkCenter();
     }
+
     return pBubble;
 }
 

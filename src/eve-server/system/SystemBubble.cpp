@@ -595,19 +595,29 @@ uint32 SystemBubble::CountNPCs() {
 
 bool SystemBubble::InBubble(const GPoint& pt, bool inWarp/*false*/) const
 {
-    if (is_log_enabled(DESTINY__BUBBLE_DEBUG)) {
-        float distance = m_center.distance(pt);
-        bool check = false;
-        if (distance < m_radius + 5000)  // 5k is the grey area between bubbles
-            check = true;
+    const double distance = m_center.distance(pt);
 
-        _log(DESTINY__BUBBLE_DEBUG, "SystemBubble::InBubble(%u) - center: %.1f,%.1f,%.1f - distance: %.1f, check: %s", \
-                m_bubbleID, m_center.x, m_center.y, m_center.z, distance, check?"true":"false");
+    // Strict radius when in warp.
+    // Hysteresis margin when not in warp.
+    const double threshold = inWarp
+        ? m_radius
+        : (m_radius + BUBBLE_HYSTERESIS_METERS);
+
+    if (is_log_enabled(DESTINY__BUBBLE_DEBUG)) {
+        const bool check = (distance <= threshold);
+        _log(DESTINY__BUBBLE_DEBUG,
+             "SystemBubble::InBubble(%u) - center: %.1f,%.1f,%.1f  dist: %.1f  thresh: %.1f  inWarp:%s  check:%s",
+             m_bubbleID,
+             m_center.x, m_center.y, m_center.z,
+             distance, threshold,
+             inWarp ? "true" : "false",
+             check ? "true" : "false");
         return check;
     }
 
-    return (m_center.distance(pt) < m_radius);
+    return (distance <= threshold);
 }
+
 
 bool SystemBubble::IsOverlap( const GPoint& pt ) const
 {
@@ -1174,4 +1184,12 @@ void SystemBubble::BubblecastSendNotification(const char* notifyType, const char
         PyIncRef(*payload);
         cur.second->SendNotification( notifyType, idType, payload, seq );
     }
+
+void SystemBubble::IncludePoint(const GPoint& pt)
+{
+    const double d = m_center.distance(pt);
+    if (d > m_radius)
+        m_radius = d;
+}
+
 }

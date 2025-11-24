@@ -203,6 +203,8 @@ private:
     std::map<uint32, SystemEntity*> m_entities;         //we do not own these.
     std::map<uint32, DroneSE*> m_drones;                //we do not own these.
 
+    void IncludePoint(const GPoint& pt);
+    
     // for spawn system     -allan 15July15
     Timer m_spawnTimer;
     bool m_ice :1;
