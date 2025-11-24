@@ -165,6 +165,9 @@ this->Add(
         &CharMgrService::EditOwnerNote)
 );
 
+this->Add("EditOwnerNote",
+    static_cast<PyResult (CharMgrService::*)(PyCallArgs&, PyInt*, PyWString*, PyString*)>(
+        &CharMgrService::EditOwnerNote));
    
 
     this->Add("RemoveOwnerNote", &CharMgrService::RemoveOwnerNote);
@@ -686,6 +689,28 @@ PyResult CharMgrService::EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyString
 
     return PyStatic.NewNone();
 }
+
+// 4) Client sends label as PyWString and body as PyString
+PyResult CharMgrService::EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyWString* labelW, PyString* bodyS)
+{
+    const uint32 charID = call.client->GetCharacterID();
+    const uint32 nid    = noteID->value();
+
+    const std::string label = labelW->content();  // OK (content() returns std::string in this fork)
+    const std::string body  = bodyS->content();   // OK — PyString::content() is std::string
+
+    if (!m_db.EditOwnerNote(charID, nid, label, body))
+    {
+        _log(SERVICE__WARNING,
+             "EditOwnerNote(labelW,bodyS): DB update failed for charID=%u, noteID=%u",
+             charID, nid);
+    }
+
+    return PyStatic.NewNone();
+}
+
+
+
 
 PyResult CharMgrService::RemoveOwnerNote(PyCallArgs& call, PyInt* noteID)
 {

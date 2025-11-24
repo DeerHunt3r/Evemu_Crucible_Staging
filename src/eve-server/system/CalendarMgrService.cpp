@@ -62,6 +62,9 @@ PyResult CalendarMgrService::DeleteEvent(PyCallArgs& call, PyInt* eventID, PyInt
     // Calendar must be reloaded or the event won't actually show as deleted.
     call.client->SendNotification("OnReloadCalendar", "charid", new PyTuple(0), false);
 
+    sLog.Blue("CalendarMgrService", "DeleteEvent: sent OnReloadCalendar to char %u (eventID=%d)",
+              call.client->GetCharacterID(), eventID->value());
+
     return nullptr;
 }
 
@@ -92,10 +95,10 @@ PyResult CalendarMgrService::CreatePersonalEvent(PyCallArgs& call,
         return PyStatic.NewNone();
     }
 
-    // ----- startDateTime -----
+    // ----- new event time -----
     int64 startDateTime = dateTime->value();
 
-    // ----- title: PyWString -> std::string (content() already returns std::string) -----
+    // ----- title: PyWString -> std::string -----
     std::string titleStr = title->content();
 
     // ----- description: may be None, PyString, or PyWString -----
@@ -103,28 +106,36 @@ PyResult CalendarMgrService::CreatePersonalEvent(PyCallArgs& call,
     if (description != nullptr) {
         if (description->IsWString()) {
             PyWString* ws = description->AsWString();
-            descStr = ws->content();           // std::string
+            descStr = ws->content();
         } else if (description->IsString()) {
             PyString* s = description->AsString();
-            descStr = s->content();            // std::string
+            descStr = s->content();
         } else {
-            // None or some other type – treat as empty, but log for debugging
             sLog.Error("CalendarMgrService::CreatePersonalEvent",
                        "Unexpected description type for calendar event; defaulting to empty string.");
         }
     }
-    // If description is nullptr or None, descStr stays ""
 
-    // ----- hand off to DB helper -----
-    return CalendarDB::SaveNewEventManual(
-        call.client->GetCharacterID(),
-        startDateTime,
-        duration,
-        important,
-        titleStr,
-        descStr,
-        invitees
-    );
+// ----- write to DB -----
+PyRep* rep = CalendarDB::SaveNewEventManual(
+    call.client->GetCharacterID(),
+    startDateTime,
+    duration,
+    important,
+    titleStr,
+    descStr,
+    invitees
+);
+
+// ----- tell client to reload calendar ---- //
+PyTuple* args = new PyTuple(1);
+args->SetItem(0, new PyInt(call.client->GetCharacterID()));
+call.client->SendNotification("OnReloadCalendar", "charid", args, false);
+
+sLog.Blue("CalendarMgrService", "CreatePersonalEvent: sent OnReloadCalendar to char %u",
+          call.client->GetCharacterID());
+
+return rep;    // new eventID (PyInt) or 0 on error
 }
 
 
@@ -154,16 +165,80 @@ PyResult CalendarMgrService::CreateAllianceEvent(PyCallArgs& call, PyLong* dateT
     return CalendarDB::SaveNewEvent(call.client->GetAllianceID(), call.client->GetCharacterID(), args);
 }
 
-PyResult CalendarMgrService::EditPersonalEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important)
+
+PyResult CalendarMgrService::EditPersonalEvent(PyCallArgs& call,
+                                               PyInt* eventID,
+                                               PyLong* oldDateTime,
+                                               PyLong* dateTime,
+                                               PyRep* duration,
+                                               PyRep* title,
+                                               PyRep* description,
+                                               PyRep* important)
 {
+    // self.calendarMgr.EditPersonalEvent(eventID, oldDateTime, dateTime, duration, title, description, important)
 
-//self.calendarMgr.EditPersonalEvent(eventID, oldDateTime, dateTime, duration, title, description, important)
-
-    sLog.Cyan( "CalendarMgrService::Handle_EditPersonalEvent()", "size=%lu", call.tuple->size());
+    sLog.Cyan("CalendarMgrService::Handle_EditPersonalEvent()", "size=%lu", call.tuple->size());
     call.Dump(SERVICE__CALL_DUMP);
 
-    return nullptr;
+    if ((eventID == nullptr) || (dateTime == nullptr) || (title == nullptr)) {
+        codelog(SERVICE__ERROR, "%s: Missing required args for EditPersonalEvent.", GetName());
+        return PyStatic.NewNone();
+    }
+
+    int64 startDateTime = dateTime->value();
+
+    // ----- title: could be PyString or PyWString -----
+    std::string titleStr;
+    if (title != nullptr) {
+        if (title->IsWString()) {
+            PyWString* ws = title->AsWString();
+            titleStr = ws->content();
+        } else if (title->IsString()) {
+            PyString* s = title->AsString();
+            titleStr = s->content();
+        } else {
+            sLog.Error("CalendarMgrService::EditPersonalEvent",
+                       "Unexpected title type for calendar event; defaulting to empty string.");
+        }
+    }
+
+    // ----- description: could be PyString or PyWString or None -----
+    std::string descStr;
+    if (description != nullptr) {
+        if (description->IsWString()) {
+            PyWString* ws = description->AsWString();
+            descStr = ws->content();
+        } else if (description->IsString()) {
+            PyString* s = description->AsString();
+            descStr = s->content();
+        } else {
+            sLog.Error("CalendarMgrService::EditPersonalEvent",
+                       "Unexpected description type for calendar event; defaulting to empty string.");
+        }
+    }
+
+// Hand off to DB: duration & important stay as PyRep* so DB helper
+// can interpret None/Int/Bool etc.
+CalendarDB::EditEventManual(
+    eventID->value(),
+    startDateTime,
+    duration,    // PyRep* durationRep
+    important,   // PyRep* importantRep
+    titleStr,
+    descStr
+);
+
+// Tell the client to reload its calendar data (for clients that honor this)
+PyTuple* args = new PyTuple(1);
+args->SetItem(0, new PyInt(call.client->GetCharacterID()));
+call.client->SendNotification("OnReloadCalendar", "charid", args, false);
+
+sLog.Blue("CalendarMgrService", "EditPersonalEvent: sent OnReloadCalendar to char %u (eventID=%d)",
+          call.client->GetCharacterID(), eventID->value());
+
+return PyStatic.NewNone();
 }
+
 
 PyResult CalendarMgrService::EditCorporationEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important)
 {

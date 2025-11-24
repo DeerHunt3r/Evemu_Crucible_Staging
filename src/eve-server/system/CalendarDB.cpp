@@ -91,7 +91,6 @@ PyRep* CalendarDB::SaveNewEvent(uint32 ownerID, Call_CreateEventWithInvites& arg
     return new PyInt(eventID);
 }
 
-
 PyRep* CalendarDB::SaveNewEventManual(
     uint32 ownerID,
     int64 startDateTime,
@@ -126,6 +125,21 @@ PyRep* CalendarDB::SaveNewEventManual(
         }
     }
 
+    // ----- escape title/description for SQL (double single quotes) -----
+    auto EscapeSqlString = [](const std::string& in) -> std::string {
+        std::string out;
+        out.reserve(in.size());
+        for (char c : in) {
+            out.push_back(c);
+            if (c == '\'')
+                out.push_back('\'');
+        }
+        return out;
+    };
+
+    std::string safeTitle = EscapeSqlString(title);
+    std::string safeDesc  = EscapeSqlString(description);
+
     DBerror err;
     uint32 eventID(0);
 
@@ -135,7 +149,7 @@ PyRep* CalendarDB::SaveNewEventManual(
             " eventTitle, eventText, flag, month, year)"
             " VALUES (%u, %u, %lli, %u, %u, '%s', '%s', %u, %u, %u)",
             ownerID, ownerID, startDateTime, duration, important,
-            title.c_str(), description.c_str(),
+            safeTitle.c_str(), safeDesc.c_str(),
             Calendar::Flag::Personal, data.month, data.year))
         {
             codelog(DATABASE__ERROR, "Error in SaveNewEventManual query (with duration): %s", err.c_str());
@@ -147,7 +161,7 @@ PyRep* CalendarDB::SaveNewEventManual(
             " eventTitle, eventText, flag, month, year)"
             " VALUES (%u, %u, %lli, %u, '%s', '%s', %u, %u, %u)",
             ownerID, ownerID, startDateTime, important,
-            title.c_str(), description.c_str(),
+            safeTitle.c_str(), safeDesc.c_str(),
             Calendar::Flag::Personal, data.month, data.year))
         {
             codelog(DATABASE__ERROR, "Error in SaveNewEventManual query (no duration): %s", err.c_str());
@@ -176,6 +190,136 @@ PyRep* CalendarDB::SaveNewEventManual(
     }
 
     return new PyInt(eventID);
+}
+
+void CalendarDB::EditEventManual(
+    uint32 eventID,
+    int64 startDateTime,
+    PyRep* durationRep,
+    PyRep* importantRep,
+    const std::string& title,
+    const std::string& description
+)
+{
+    EvE::TimeParts data = EvE::TimeParts();
+    data = GetTimeParts(startDateTime);
+
+    // ----- duration: can be None or Int -----
+    uint32 duration = 0;
+    bool hasDuration = false;
+    if (durationRep != nullptr && durationRep->IsInt()) {
+        PyInt* d = durationRep->AsInt();
+        duration = d->value();
+        hasDuration = true;
+    }
+
+    // ----- importance: Int or Bool (default: don't change if not provided) -----
+    uint32 important = 0;
+    bool hasImportant = false;
+    if (importantRep != nullptr) {
+        if (importantRep->IsInt()) {
+            PyInt* i = importantRep->AsInt();
+            important = i->value();
+            hasImportant = true;
+        } else if (importantRep->IsBool()) {
+            PyBool* b = importantRep->AsBool();
+            important = b->value() ? 1 : 0;
+            hasImportant = true;
+        }
+    }
+
+    // ----- escape title/description for SQL (double single quotes) -----
+    auto EscapeSqlString = [](const std::string& in) -> std::string {
+        std::string out;
+        out.reserve(in.size());
+        for (char c : in) {
+            out.push_back(c);
+            if (c == '\'')
+                out.push_back('\'');
+        }
+        return out;
+    };
+
+    std::string safeTitle = EscapeSqlString(title);
+    std::string safeDesc  = EscapeSqlString(description);
+
+    DBerror err;
+    bool ok = false;
+
+    // Build UPDATE depending on what we actually have
+    if (hasDuration && hasImportant) {
+        ok = sDatabase.RunQuery(err,
+            "UPDATE sysCalendarEvents"
+            " SET eventDateTime = %lli,"
+            "     eventDuration = %u,"
+            "     importance = %u,"
+            "     eventTitle = '%s',"
+            "     eventText = '%s',"
+            "     month = %u,"
+            "     year = %u"
+            " WHERE eventID = %u",
+            startDateTime,
+            duration,
+            important,
+            safeTitle.c_str(),
+            safeDesc.c_str(),
+            data.month,
+            data.year,
+            eventID);
+    } else if (hasDuration && !hasImportant) {
+        ok = sDatabase.RunQuery(err,
+            "UPDATE sysCalendarEvents"
+            " SET eventDateTime = %lli,"
+            "     eventDuration = %u,"
+            "     eventTitle = '%s',"
+            "     eventText = '%s',"
+            "     month = %u,"
+            "     year = %u"
+            " WHERE eventID = %u",
+            startDateTime,
+            duration,
+            safeTitle.c_str(),
+            safeDesc.c_str(),
+            data.month,
+            data.year,
+            eventID);
+    } else if (!hasDuration && hasImportant) {
+        ok = sDatabase.RunQuery(err,
+            "UPDATE sysCalendarEvents"
+            " SET eventDateTime = %lli,"
+            "     importance = %u,"
+            "     eventTitle = '%s',"
+            "     eventText = '%s',"
+            "     month = %u,"
+            "     year = %u"
+            " WHERE eventID = %u",
+            startDateTime,
+            important,
+            safeTitle.c_str(),
+            safeDesc.c_str(),
+            data.month,
+            data.year,
+            eventID);
+    } else {
+        ok = sDatabase.RunQuery(err,
+            "UPDATE sysCalendarEvents"
+            " SET eventDateTime = %lli,"
+            "     eventTitle = '%s',"
+            "     eventText = '%s',"
+            "     month = %u,"
+            "     year = %u"
+            " WHERE eventID = %u",
+            startDateTime,
+            safeTitle.c_str(),
+            safeDesc.c_str(),
+            data.month,
+            data.year,
+            eventID);
+    }
+
+    if (!ok) {
+        codelog(DATABASE__ERROR, "EditEventManual query failed: %s", err.c_str());
+    }
 }
 
 
@@ -256,7 +400,7 @@ PyRep* CalendarDB::GetEventList(uint32 ownerID, uint32 month, uint32 year)
     if (!sDatabase.RunQuery(res,
         "SELECT eventID, ownerID, eventDateTime, dateModified, eventDuration, importance, eventTitle, flag,"
         " autoEventType, isDeleted"
-        " FROM sysCalendarEvents WHERE ownerID = %u AND month = %u AND year = %u", ownerID, month, year))
+        " FROM sysCalendarEvents WHERE ownerID = %u AND month = %u AND year = %u AND isDeleted = 0", ownerID, month, year))
     {
         codelog(DATABASE__ERROR, "Error in GetEventList query: %s", res.error.c_str());
         return nullptr;
@@ -268,7 +412,14 @@ PyRep* CalendarDB::GetEventList(uint32 ownerID, uint32 month, uint32 year)
     DBResultRow row;
     PyList* list = new PyList();
     while (res.GetRow(row)) {
-        PyDict* dict = new PyDict();
+// DEBUG: log what we're actually sending back to the client
+        sLog.Cyan("CalendarDB::GetEventList",
+                  "eventID=%u ownerID=%u title='%s' isDeleted=%u",
+                  row.GetUInt(0),
+                  row.GetUInt(1),
+                  row.GetText(6),
+                  row.GetBool(9));  
+	    PyDict* dict = new PyDict();
             dict->SetItemString("eventID",              new PyInt(row.GetInt(0)));
             dict->SetItemString("ownerID",              new PyInt(row.GetInt(1)));
             dict->SetItemString("eventDateTime",        new PyLong(row.GetInt64(2)));

@@ -25,6 +25,18 @@ class CalendarDB {
       static PyRep* SaveNewEvent(uint32 ownerID, Call_CreateEventWithInvites &args);
       static PyRep* SaveNewEvent(uint32 ownerID, uint32 creatorID, Call_CreateEvent &args);
      
+    // Manual edit used by CalendarMgrService::EditPersonalEvent
+     static void EditEventManual(
+        uint32 eventID,
+        int64 startDateTime,
+        PyRep* durationRep,
+        PyRep* importantRep,
+        const std::string& title,
+        const std::string& description
+     );
+
+
+
       static PyRep* SaveNewEventManual(
           uint32 ownerID,
           int64 startDateTime,

@@ -51,7 +51,15 @@ protected:
     
     PyResult CreateCorporationEvent(PyCallArgs& call, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important);
     PyResult CreateAllianceEvent(PyCallArgs& call, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important);
-    PyResult EditPersonalEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important);
+    PyResult EditPersonalEvent(PyCallArgs& call,
+                           PyInt* eventID,
+                           PyLong* oldDateTime,
+                           PyLong* dateTime,
+                           PyRep* duration,
+                           PyRep* title,
+                           PyRep* description,
+                           PyRep* important);
+
     PyResult EditCorporationEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important);
     PyResult EditAllianceEvent(PyCallArgs& call, PyInt* eventID, PyLong* oldDateTime, PyLong* dateTime, PyRep* duration, PyWString* title, PyRep* description, PyRep* important);
 

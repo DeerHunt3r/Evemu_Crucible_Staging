@@ -2288,6 +2288,13 @@ void Client::SendNotification(const char *notifyType, const char *idType, PyTupl
 }
 
 void Client::SendNotification(const PyAddress &dest, EVENotificationStream &noti, bool seq/*true*/) {
+    sLog.Blue("Client::SendNotification",
+              "Sending notification '%s' (idType='%s') to user %u (char %u)",
+              dest.service.c_str(),
+              dest.bcast_idtype.c_str(),
+              GetUserID(),
+              GetCharacterID());
+
     //build the packet:
     PyPacket *packet = new PyPacket();
     packet->type_string = "macho.Notification";
@@ -2316,6 +2323,7 @@ void Client::SendNotification(const PyAddress &dest, EVENotificationStream &noti
 
     QueuePacket(packet);
 }
+
 
 /************************************************************************/
 /* EVEAdministration Interface                                          */

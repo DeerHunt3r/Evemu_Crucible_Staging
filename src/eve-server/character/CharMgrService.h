@@ -64,6 +64,8 @@ protected:
     PyResult EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyWString* bodyW);
     PyResult EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyWString* labelW, PyWString* bodyW);
     PyResult EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyString* labelS, PyWString* bodyW);
+    // New overload: (PyInt*, PyWString*, PyString*)
+    PyResult EditOwnerNote(PyCallArgs& call, PyInt* noteID, PyWString* labelW, PyString* bodyS);
 
 
 

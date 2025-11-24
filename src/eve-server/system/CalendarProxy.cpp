@@ -38,6 +38,9 @@ CalendarProxy::CalendarProxy() :
 
 PyResult CalendarProxy::GetEventList(PyCallArgs& call, PyInt* month, PyInt* year)
 {
+    sLog.Cyan("CalendarProxy", "GetEventList called for char %u (month=%d, year=%d)",
+              call.client->GetCharacterID(), month->value(), year->value());
+
     PyList *list = new PyList();
     PyRep* res(nullptr);
 
@@ -68,10 +71,14 @@ PyResult CalendarProxy::GetEventList(PyCallArgs& call, PyInt* month, PyInt* year
 
     return list;
 }
-
 PyResult CalendarProxy::GetEventDetails(PyCallArgs& call, PyInt* eventID, PyInt* ownerID)
 {
     // self.eventDetails[eventID] = self.GetCalendarProxy().GetEventDetails(eventID, ownerID)
+    sLog.Cyan("CalendarProxy", "GetEventDetails called: eventID=%d ownerID=%d for char %u",
+              eventID->value(),
+              ownerID != nullptr ? ownerID->value() : 0,
+              call.client->GetCharacterID());
+
     return CalendarDB::GetEventDetails(eventID->value());
 }
 
