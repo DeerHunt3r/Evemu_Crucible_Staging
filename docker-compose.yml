@@ -27,19 +27,20 @@ services:
       - SYS_PTRACE
 
   db:
-    image: "bitnami/mariadb:11.4"
+    image: "bitnami/mariadb:latest"
     container_name: evemu_db
     volumes:
-      - db:/bitnami/mariadb
+      - evemu_mariadb:/bitnami
     # If you want to connect to the Database pick your host port to map it to, (host-port:container-port) below. 
-    #ports:
-    #  - "3306:3306"  
+    ports:
+      - "3306:3306"  
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
       - MARIADB_USER=evemu
-      - MARIADB_PASSWORD=evemu
+      - MARIADB_PASSWORD=evemu_root_pass123
       - MARIADB_DATABASE=evemu
 volumes:
+  evemu_mariadb:
   db:
   config:
   server_cache:

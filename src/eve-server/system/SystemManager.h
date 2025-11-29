@@ -31,7 +31,7 @@
 #include "system/SolarSystem.h"
 #include "system/SystemDB.h"
 #include "chat/LSCService.h"
-
+#include "system/StaticPropSpawner.h"
 
 class PyRep;
 class PyDict;
@@ -197,6 +197,9 @@ private:
     void ManipulateTimeData();
     std::map<uint32, uint8> m_jumpMap;  // timestamp/jumps
     // may have to do kill data like jumps above
+
+      // New: static prop spawner (billboards, scenic props, etc.).
+    StaticPropSpawner  m_staticPropSpawner;
 
     // for spawn systems     -allan 15July15
     uint8 m_beltCount;

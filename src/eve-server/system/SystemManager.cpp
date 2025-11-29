@@ -459,6 +459,13 @@ bool SystemManager::LoadSystemStatics() {
 
     _log(SERVER__INIT, "SystemManager::LoadSystemStatics() - %u Static System entities loaded for %s(%u)", entities.size(), m_data.name.c_str(), m_data.systemID);
     entities.clear();
+ // For now this just logs that it ran.
+    if (!m_staticPropSpawner.SpawnForSystem(*this)) {
+        _log(SERVICE__WARNING,
+             "StaticPropSpawner: SpawnForSystem() reported failure for system %u.",
+             GetID());
+    }
+
     return true;
 }
 
@@ -1791,3 +1798,4 @@ bool SystemManager::IsNull(std::map<uint32, SystemEntity*>::iterator& i)
      * Otherwise it is valid. I like to call invalid iterators also as "null iterators".
      */
 }
+
