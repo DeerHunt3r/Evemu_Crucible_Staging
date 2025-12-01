@@ -17,6 +17,18 @@
 #include "system/Damage.h"
 #include "system/SystemBubble.h"
 
+// Simple Crimewatch-lite helper: treat sec status <= -5.0 as outlaw.
+static bool IsOutlaw(Client* c)
+{
+    if (c == nullptr)
+        return false;
+
+    // Client::GetSecurityRating() already forwards to m_char->GetSecurityRating()
+    // and is what the rest of the codebase uses.
+    return (c->GetSecurityRating() <= -5.0f);
+}
+
+
 SentryAI::SentryAI(Sentry* who)
 : m_state(State::Idle),
 m_npc(who),
@@ -81,67 +93,109 @@ m_webifierTimer(5000)         //arbitrary.
 }
 
 void SentryAI::Process() {
-    if ((!m_processTimer.Check()) or (!m_npc->SysBubble()->HasPlayers()))
+    // Don’t do anything if our tick timer hasn’t fired yet,
+    // or there are no players in the bubble.
+    if ((!m_processTimer.Check()) || (!m_npc->SysBubble()->HasPlayers()))
         return;
 
-    /* NPC::State definitions   -allan 25July15  (UD 1June16)
-    *   Idle,       // not doing anything, nothing in sight....idle.
-    *   Engaged,    // actively fighting.
-    *   Signaling   // calling for help
-    */
-    switch(m_state) {
-        case State::Idle: {
-            // The parameter proximityRange (154) tells us how far we "see" (npc's dont have this, but drones do)
-            if (m_beginFindTarget.Check()) {
-                std::vector<Client*> clientVec;
-                clientVec.clear();
-                DestinyManager* pDestiny(nullptr);
-                m_npc->SysBubble()->GetPlayers(clientVec); // what about player drones?  yes...later
-                for (auto cur : clientVec) {
-                    /** @todo  this needs work
-                    if (cur->IsLogin() or cur->IsInvul() or cur->InPod())
-                        continue;
-                    if (!cur->GetShipTarget())
-                        continue;
-                    if ((!cur->GetShipTarget()->DestinyMgr()) or (!cur->GetShipTarget()->SysBubble()))    // this shouldnt be needed, but whatever...
-                        continue;
-                    pDestiny = cur->GetShipTarget()->DestinyMgr();
-                    if (pDestiny->IsCloaked() or pDestiny->IsWarping())
-                        continue;
-                    if (m_npc->GetPosition().distance(cur->GetShipTarget()->GetPosition()) > m_sightRange)
-                        continue;
-                    Target(cur->GetShipTarget());
-                    */
-                    return;
-                }
-            } else {
-                if (!m_beginFindTarget.Enabled())
-                    m_beginFindTarget.Start(m_attackSpeed);  //find target is based on npc attack speed.
+    /*
+     * NPC::State definitions   -allan 25July15  (UD 1June16)
+     *   Idle,       // not doing anything, nothing in sight....idle.
+     *   Engaged,    // actively fighting.
+     *   Signaling   // calling for help
+     */
+    switch (m_state) {
+
+    case State::Idle: {
+        // The parameter proximityRange (154) tells us how far we "see"
+        // (NPCs don't have this, but drones do). Here we just use m_sightRange.
+        if (m_beginFindTarget.Check()) {
+            std::vector<Client*> clientVec;
+            clientVec.clear();
+            DestinyManager* pDestiny(nullptr);
+
+            // Grab all players in our bubble.
+            m_npc->SysBubble()->GetPlayers(clientVec);     // player drones, etc, can come later
+
+            for (auto cur : clientVec) {
+                if (cur == nullptr)
+                    continue;
+
+                // Skip players not really in a shootable state.
+                if (cur->IsLogin() || cur->IsInvul() || cur->InPod())
+                    continue;
+
+                // 🧠 Crimewatch-lite v1:
+                // Only consider players who are true outlaws (sec <= -5.0).
+                if (!IsOutlaw(cur))
+                continue;       
+     
+
+		// Get the player's ship SystemEntity.
+                ShipSE* shipSE = cur->GetShipSE();
+                if (shipSE == nullptr)
+                    continue;
+
+                if (!shipSE->DestinyMgr() || !shipSE->SysBubble())
+                    continue;
+
+                pDestiny = shipSE->DestinyMgr();
+                if (pDestiny->IsCloaked() || pDestiny->IsWarping())
+                    continue;
+
+                // Out of our sightRange? Skip.
+                if (m_npc->GetPosition().distance(shipSE->GetPosition()) > m_sightRange)
+                    continue;
+
+                // TODO (later): only shoot criminals/outlaws here instead of everyone.
+                _log(NPC__AI_TRACE,
+                     "%s(%u): Acquiring target %s(%u) at distance %.0f.",
+                     m_npc->GetName(), m_npc->GetID(),
+                     shipSE->GetName(), shipSE->GetID(),
+                     m_npc->GetPosition().distance(shipSE->GetPosition()));
+
+                Target(shipSE);
+                return;
             }
-        } break;
+        } else {
+            // Keep the find-target timer running.
+            if (!m_beginFindTarget.Enabled())
+                m_beginFindTarget.Start(m_attackSpeed);
+        }
+    } break;
+
+
         case State::Engaged: {
+            // If our TargetMgr has no targets, drop back to Idle.
             if (m_npc->TargetMgr()->HasNoTargets()) {
-                _log(NPC__AI_TRACE, "%s(%u): Stopped %s, HasNoTargets = true.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
+                _log(NPC__AI_TRACE,
+                     "%s(%u): Stopped %s, HasNoTargets returned true.  Going Idle.",
+                     m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
                 SetIdle();
                 return;
             }
+
+            // Use the first target as our active target.
             SystemEntity* pTarget = m_npc->TargetMgr()->GetFirstTarget(false);
             if (!pTarget) {
-                _log(NPC__AI_TRACE, "%s(%u): Stopped %s, GetFirstTarget() returned NULL.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
+                _log(NPC__AI_TRACE,
+                     "%s(%u): Stopped %s, GetFirstTarget returned nullptr.  Going Idle.",
+                     m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
                 SetIdle();
                 return;
-            } else if (!pTarget->SysBubble()) {
-                ClearTarget(pTarget);
-                return;
             }
-            CheckDistance(pTarget);
+
+            // Delegate all the real checks (in-bubble, cloaked, etc.) to Attack().
+            Attack(pTarget);
         } break;
-        case State::Signaling: {
-            _log(NPC__AI_TRACE, "%s(%u): Called %s, needs to be completed.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
-            // not sure how im gonna do this
+
+        default: {
+            // Other states (Signaling, etc.) not used for static sentry guns yet.
         } break;
     }
 }
+
+
 
 void SentryAI::SetIdle() {
     if (m_state == State::Idle) return;

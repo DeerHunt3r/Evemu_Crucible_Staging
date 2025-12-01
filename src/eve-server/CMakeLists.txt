@@ -379,6 +379,8 @@ SET( missions_SOURCE
 
 SET( npc_INCLUDE
      #"${TARGET_INCLUDE_DIR}/npc/Concord.h"
+     #"${TARGET_INCLUDE_DIR}/npc/ConcordSpawnMgr.h"
+     #"${TARGET_INCLUDE_DIR}/npc/ConcordAI.h"
      "${TARGET_INCLUDE_DIR}/npc/Drone.h"
      "${TARGET_INCLUDE_DIR}/npc/DroneAI.h"
      "${TARGET_INCLUDE_DIR}/npc/EntityService.h"
@@ -388,6 +390,8 @@ SET( npc_INCLUDE
      "${TARGET_INCLUDE_DIR}/npc/SentryAI.h")
 SET( npc_SOURCE
      #"${TARGET_SOURCE_DIR}/npc/Concord.cpp"
+     #"${TARGET_SOURCE_DIR}/npc/ConcordSpawnMgr.cpp"
+     #"${TARGET_SOURCE_DIR}/npc/ConcordAI.cpp"
      "${TARGET_SOURCE_DIR}/npc/Drone.cpp"
      "${TARGET_SOURCE_DIR}/npc/DroneAI.cpp"
      "${TARGET_SOURCE_DIR}/npc/EntityService.cpp"
@@ -554,6 +558,7 @@ SET( system_INCLUDE
      "${TARGET_INCLUDE_DIR}/system/CalendarMgrService.h"
      "${TARGET_INCLUDE_DIR}/system/Celestial.h"
      "${TARGET_INCLUDE_DIR}/system/CrimeWatch.h"
+     "${TARGET_INCLUDE_DIR}/system/ConcordSpawner.h"
      "${TARGET_INCLUDE_DIR}/system/Container.h"
      "${TARGET_INCLUDE_DIR}/system/Damage.h"
      "${TARGET_INCLUDE_DIR}/system/DestinyManager.h"
@@ -579,6 +584,7 @@ SET( system_SOURCE
      "${TARGET_SOURCE_DIR}/system/CalendarMgrService.cpp"
      "${TARGET_SOURCE_DIR}/system/Celestial.cpp"
      "${TARGET_SOURCE_DIR}/system/CrimeWatch.cpp"
+     "${TARGET_SOURCE_DIR}/system/ConcordSpawner.cpp"
      "${TARGET_SOURCE_DIR}/system/Container.cpp"
      "${TARGET_SOURCE_DIR}/system/Damage.cpp"
      "${TARGET_SOURCE_DIR}/system/DestinyManager.cpp"

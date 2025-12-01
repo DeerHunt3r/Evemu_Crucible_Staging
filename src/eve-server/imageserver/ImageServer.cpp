@@ -152,8 +152,8 @@ std::string ImageServer::GetFilePath(std::string& category, uint32 id, uint32 si
 {
     std::string extension = category == "Character" ? "jpg" : "png";
 
-    // HACK: We don't have any other
-    size = 512;
+    // Force character portraits to use 256px images
+    size = 256;
 
     std::stringstream builder;
     builder << _basePath << category << "/" << id << "_" << size << "." << extension;

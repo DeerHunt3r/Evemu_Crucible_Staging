@@ -5,7 +5,7 @@ services:
     volumes:
       - config:/app/etc
       - server_cache:/app/server_cache
-      - image_cache:/app/image_cache
+      - /home/rob/EVEImages:/app/image_cache
       - logs:/app/logs        # optional but very handy
     ports:
       - "26000:26000"
@@ -17,7 +17,7 @@ services:
       # were last in your current file and therefore what you've actually been running
       - SEED_MARKET=${SEED_MARKET:-TRUE}
       - SEED_SATURATION=${SEED_SATURATION:-80}
-      - SEED_REGIONS=${SEED_REGIONS:-Derelik,The Citadel,The Forge,Essence,Verge Vendor,Everyshore,Tash-Murkon,Sinq Liason}
+      - SEED_REGIONS=${SEED_REGIONS:-Derelik,The Citadel,The Forge,Essence,Verge Vendor,Everyshore,Tash-Murkon,Sinq Laison}
       - RUN_WITH_GDB=${RUN_GDB:-FALSE}
     stdin_open: true  # Enables stdin for the container. Attach to it with 'docker attach'
     tty: true

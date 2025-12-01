@@ -95,6 +95,7 @@ m_secValue(1.1f)
     m_entities.clear();
     m_planetMap.clear();
     m_gateMap.clear();
+    m_stationMap.clear();
     m_ratBubbles.clear();
     m_beltVector.clear();
     m_roidBubbles.clear();
@@ -389,17 +390,27 @@ bool SystemManager::LoadSystemStatics() {
 
     SystemEntity* pSE(nullptr);
     for (auto cur : entities) {
-        switch (cur.groupID) {
+                    switch (cur.groupID) {
             case EVEDB::invGroups::Station: {
                 /** @todo (Allan) outposts are group::station - may need to hack this */
                 /*  types 12242 - 22298 in group 15 are outposts */
                 /*  types 29323 - 29390 in group 15 are wrecked stations */
                 StationItemRef itemRef = sItemFactory.GetStationRef(cur.itemID);
-                StationSE *pSSE = new StationSE(itemRef, GetServiceMgr(), this);
+                StationSE* pSSE = new StationSE(itemRef, GetServiceMgr(), this);
+
+                // Register in global entity list helper
                 sEntityList.AddStation(cur.itemID, itemRef);
+
+                // Track stations per-system so StaticPropSpawner can decorate them
+                m_stationMap.insert(std::make_pair(
+                    cur.itemID,
+                    static_cast<SystemEntity*>(pSSE)));
+
                 pSE = pSSE;
             } break;
-            case EVEDB::invGroups::Asteroid_Belt: {
+    
+	    
+	    case EVEDB::invGroups::Asteroid_Belt: {
                 CelestialObjectRef itemRef = sItemFactory.GetCelestialRef(cur.itemID);
                 BeltSE *pBSE = new BeltSE(itemRef, GetServiceMgr(), this);
                 pBSE->SetBeltMgr(m_beltMgr);

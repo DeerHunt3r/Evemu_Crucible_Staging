@@ -152,7 +152,8 @@ public:
     void GetAllEntities(std::vector<CosmicSignature>& vector);
 
     std::map<uint32, SystemEntity*> GetOperationalStatics() { return m_opStaticEntities; }
-    std::map<uint32, SystemEntity*> GetGates() { return m_gateMap; }
+    std::map<uint32, SystemEntity*> GetGates()    { return m_gateMap; }
+    std::map<uint32, SystemEntity*> GetStations() { return m_stationMap; }
 
     SystemEntity* GetEntityByID(uint32 itemID) { return m_entities.find(itemID)->second; }
 
@@ -214,7 +215,8 @@ private:
     // for POS system       -allan 23July17
     std::map<uint32, SystemEntity*> m_moonMap;        // our container, but we DONT own the SE*
     std::map<uint32, SystemEntity*> m_planetMap;      // our container, but we DONT own the SE*
-    std::map<uint32, SystemEntity*> m_gateMap;      // our container, but we DONT own the SE*
+    std::map<uint32, SystemEntity*> m_gateMap;        // our container, but we DONT own the SE*
+    std::map<uint32, SystemEntity*> m_stationMap;     // our container, but we DONT own the SE*
 
     // for grid Unloading system  -allan  27June2015
     bool m_loaded;

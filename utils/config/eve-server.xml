@@ -275,7 +275,7 @@ boolean can use either 0/1 OR true/false.
         <logDir>../logs/</logDir>
         <logSettings>../etc/log.ini</logSettings>
         <cacheDir>../server_cache/</cacheDir>
-        <imageDir>../image_cache/</imageDir>
+	<imageDir>/app/image_cache/</imageDir>
         <marketBotSettings>../etc/MarketBot.xml</marketBotSettings>
     </files>
 

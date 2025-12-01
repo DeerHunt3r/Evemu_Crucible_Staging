@@ -42,6 +42,9 @@
 #include "system/Container.h"
 #include "system/SystemBubble.h"
 #include "system/cosmicMgrs/AnomalyMgr.h"
+//#include "system/ConcordSpawner.h"
+
+
 
 /*
 DAMAGE
@@ -117,6 +120,30 @@ bool SystemEntity::ApplyDamage(Damage &d) {
             _log(DAMAGE__MESSAGE, "%s(%u): Initializing %.2f damage from unknown source.", GetName(), GetID(), d.GetTotal());
         }
     }
+
+  // --------------------------------------------------------------------
+    // High-sec criminal aggression ? reactive CONCORD response (v1).
+    //
+    // Rules:
+    //  - Only in 0.5+ systems.
+    //  - Only when a player ship damages another player ship.
+    //  - NPCs and drones do not trigger CONCORD.
+    //  - Uses m_system->GetSystemSecurityRating(), which your tree already uses.
+    // --------------------------------------------------------------------
+  /*
+    if (m_system && (m_system->GetSystemSecurityRating() >= 0.5)) {
+        if (HasPilot() && d.srcSE && d.srcSE->HasPilot()) {
+            Client* attacker = d.srcSE->GetPilot();
+            Client* victim   = GetPilot();
+
+            if (attacker && victim && (attacker != victim)) {
+                // Call into your CONCORD helper.
+                // If your implementation is named differently, adjust this line.
+                ConcordSpawner::OnCriminalAct(*m_system, attacker);
+            }
+        }
+    }
+*/
 
     int8 damageID(0);
     switch (d.weaponRef->groupID()) {
