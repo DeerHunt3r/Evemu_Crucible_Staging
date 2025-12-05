@@ -1472,13 +1472,18 @@ PyRep *CorporationDB::GetApplications(uint32 corpID) {
 
 bool CorporationDB::GetCurrentApplicationInfo(Corp::ApplicationInfo& aInfo) {
     DBQueryResult res;
+
+    // Escape application text so quotes/apostrophes don't break the SQL
+    std::string escaped;
+    sDatabase.DoEscapeString(escaped, aInfo.appText);
+
     if (!sDatabase.RunQuery(res,
         " SELECT"
         " applicationID, applicationText, roles, grantableRoles, status,"
         " applicationDateTime, lastCorpUpdaterID, deleted"
         " FROM crpApplications"
         " WHERE characterID = %u AND corporationID = %u AND applicationText = '%s'",
-        aInfo.charID, aInfo.corpID, aInfo.appText.c_str()))
+        aInfo.charID, aInfo.corpID, escaped.c_str()))
     {
         codelog(CORP__DB_ERROR, "Error in query: %s", res.error.c_str());
         aInfo.valid = false;
@@ -1492,17 +1497,18 @@ bool CorporationDB::GetCurrentApplicationInfo(Corp::ApplicationInfo& aInfo) {
         return false;
     }
 
-    aInfo.appID = row.GetInt(0);
-    aInfo.appText = row.GetText(1);
-    aInfo.role = row.GetInt64(2);
-    aInfo.grantRole = row.GetInt64(3);
-    aInfo.status = row.GetInt(4);
-    aInfo.appTime = row.GetInt64(5);
-    aInfo.lastCID = row.GetInt(6);
-    aInfo.deleted = row.GetInt(7);
-    aInfo.valid = true;
+    aInfo.appID      = row.GetInt(0);
+    aInfo.appText    = row.GetText(1);
+    aInfo.role       = row.GetInt64(2);
+    aInfo.grantRole  = row.GetInt64(3);
+    aInfo.status     = row.GetInt(4);
+    aInfo.appTime    = row.GetInt64(5);
+    aInfo.lastCID    = row.GetInt(6);
+    aInfo.deleted    = row.GetInt(7);
+    aInfo.valid      = true;
     return true;
 }
+
 
 bool CorporationDB::InsertApplication(Corp::ApplicationInfo& aInfo) {
     if (!aInfo.valid) {

@@ -103,6 +103,10 @@ protected:
     std::string GetStateName(int8 stateID);
 
 private:
+    // Concord-specific helpers
+    bool IsConcordShip() const;
+    void ProcessConcord();
+
     bool m_webber           :1;
     bool m_warpScram        :1;
     bool m_isWandering      :1;

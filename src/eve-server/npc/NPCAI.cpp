@@ -47,6 +47,8 @@
 #include "system/DestinyManager.h"
 #include "system/Damage.h"
 #include "system/SystemBubble.h"
+#include "npc/concord/ConcordShips.h"
+
 
 NPCAIMgr::NPCAIMgr(NPC* who)
 : m_state(NPCAI::State::Idle),
@@ -265,6 +267,61 @@ NPCAIMgr::NPCAIMgr(NPC* who)
     //    AttrEntityGroupRespawnChance = 640,
 }
 
+bool NPCAIMgr::IsConcordShip() const
+{
+    if (m_npc == nullptr)
+        return false;
+
+    const ConcordV2::ConcordShipTypes& types =
+        ConcordV2::ConcordShips::Instance().GetTypes();
+
+    uint32 tid = m_npc->GetSelf()->typeID();
+    return (tid == types.policeCommanderTypeID ||
+            tid == types.policeCaptainTypeID   ||
+            tid == types.policeDroneTypeID);
+}
+
+void NPCAIMgr::ProcessConcord()
+{
+    if (m_npc == nullptr)
+        return;
+
+    SystemEntity* primary = m_npc->GetConcordPrimaryTarget();
+
+    // No known criminal: stay idle and do NOT pick random players.
+    if (primary == nullptr)
+    {
+        if (m_state != NPCAI::State::Idle)
+            SetIdle();
+        return;
+    }
+
+    // If the criminal left the bubble or is dead, stop fighting.
+    if (primary->SysBubble() != m_npc->SysBubble() || primary->IsDead())
+    {
+        SetIdle();
+        return;
+    }
+
+    // If we're not already targeting the criminal, start targeting them.
+    SystemEntity* current = nullptr;
+    if (!m_npc->TargetMgr()->HasNoTargets())
+        current = m_npc->TargetMgr()->GetFirstTarget(false);
+
+    if (current != primary)
+    {
+        Target(primary);
+        return; // Target() sets state/timers; we will attack on the next tick.
+    }
+
+    // Already targeting the criminal: maintain range and attack.
+    CheckDistance(primary);
+    if (m_missileTimer.Check())
+        LaunchMissile(m_missileTypeID, primary);
+}
+
+
+
 void NPCAIMgr::Process() {
     if (m_destiny->IsWarping())
         return;
@@ -277,83 +334,82 @@ void NPCAIMgr::Process() {
         }
     }
 
-    /* NPCAI::State definitions   -allan 25July15  (UD 1June16)
-     *   Idle,       // not doing anything, nothing in sight....idle.  call Wander() to loosely orbit random object in bubble ~10-20k at 1/2 orbit speed
-     *   Chasing,    // target within npc sight range.  attacking begins here.  use m_maxSpeed to get within falloff
-     *   Following,  // between optimal and falloff.  try to get closer, but still orbiting and attacking
-     *   Engaged,    // actively fighting (in orbit).  use m_orbitSpeed.
-     *   Fleeing,    // running away....use m_maxSpeed then warp away when out of range	(does this make sense??)
-     *   Signaling   // calling for help..use m_orbitSpeed *2 to speed tank while calling for reinforcements
-     */
-    switch(m_state) {
-        case NPCAI::State::Idle: {
-            if (m_beginFindTarget.Check()) {
-                std::vector<Client*> clientVec;
-                clientVec.clear();
-                DestinyManager* pDestiny(nullptr);
-                m_npc->SysBubble()->GetPlayers(clientVec); // what about player drones?  yes...later
-                for (auto cur : clientVec) {
-                    if (cur->IsInvul())
-                        continue;
-                    if (cur->GetShipSE() == nullptr)
-                        continue;
-                    if (cur->InPod()) {
-                        if (sConfig.npc.TargetPod) {
-                            if (m_npc->SystemMgr()->GetSystemSecurityRating() > sConfig.npc.TargetPodSec)
-                                continue;
-                        } else {
-                            continue;
-                        }
-                    }
-                    pDestiny = cur->GetShipSE()->DestinyMgr();
-                    if (pDestiny == nullptr)   // this shouldnt be needed, but whatever...
-                        continue;
-                    if (pDestiny->IsCloaked() or pDestiny->IsWarping())
-                        continue;
-                    if (m_npc->GetPosition().distance(cur->GetShipSE()->GetPosition()) > m_sightRange)
-                        continue;
+    /* NPCAI::State definitions   -allan 25July15  (UD 1June16) */
 
-                    Target(cur->GetShipSE());
+    if (IsConcordShip()) {
+        // Concord-specific logic: only ever care about the primary criminal target.
+        ProcessConcord();
+    } else {
+        switch(m_state) {
+            case NPCAI::State::Idle: {
+                if (m_beginFindTarget.Check()) {
+                    std::vector<Client*> clientVec;
+                    clientVec.clear();
+                    DestinyManager* pDestiny(nullptr);
+                    m_npc->SysBubble()->GetPlayers(clientVec); // what about player drones?  yes...later
+                    for (auto cur : clientVec) {
+                        if (cur->IsInvul())
+                            continue;
+                        if (cur->GetShipSE() == nullptr)
+                            continue;
+                        if (cur->InPod()) {
+                            if (sConfig.npc.TargetPod) {
+                                if (m_npc->SystemMgr()->GetSystemSecurityRating() > sConfig.npc.TargetPodSec)
+                                    continue;
+                            } else {
+                                continue;
+                            }
+                        }
+                        pDestiny = cur->GetShipSE()->DestinyMgr();
+                        if (pDestiny == nullptr)   // this shouldnt be needed, but whatever...
+                            continue;
+                        if (pDestiny->IsCloaked() or pDestiny->IsWarping())
+                            continue;
+                        if (m_npc->GetPosition().distance(cur->GetShipSE()->GetPosition()) > m_sightRange)
+                            continue;
+
+                        Target(cur->GetShipSE());
+                        return;
+                    }
+                    if (sConfig.npc.IdleWander)
+                        if (!m_isWandering)
+                            SetWander();
+                } else {
+                    if (!m_beginFindTarget.Enabled())
+                        m_beginFindTarget.Start(m_attackSpeed);  //find target is based on npc attack speed.
+                }
+            } break;
+            case NPCAI::State::Chasing:
+            case NPCAI::State::Following:
+            case NPCAI::State::Engaged: {
+                if (m_npc->TargetMgr()->HasNoTargets()) {
+                    _log(NPC__AI_TRACE, "%s(%u): Stopped %s - HasNoTargets = true.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
+                    SetIdle();
                     return;
                 }
-                if (sConfig.npc.IdleWander)
-                    if (!m_isWandering)
-                        SetWander();
-            } else {
-                if (!m_beginFindTarget.Enabled())
-                    m_beginFindTarget.Start(m_attackSpeed);  //find target is based on npc attack speed.
-            }
-        } break;
-        case NPCAI::State::Chasing:
-        case NPCAI::State::Following:
-        case NPCAI::State::Engaged: {
-            if (m_npc->TargetMgr()->HasNoTargets()) {
-                _log(NPC__AI_TRACE, "%s(%u): Stopped %s - HasNoTargets = true.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
-                SetIdle();
-                return;
-            }
-            SystemEntity* pSE = m_npc->TargetMgr()->GetFirstTarget(false);
-            if (pSE == nullptr) {
-                _log(NPC__AI_TRACE, "%s(%u): Stopped %s - GetFirstTarget() returned NULL.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
-                SetIdle();
-                return;
-            }
-            if (pSE->SysBubble() == nullptr) {
-                ClearTarget(pSE);
-                return;
-            }
-            CheckDistance(pSE);
-            if (m_missileTimer.Check())
-                LaunchMissile(m_missileTypeID, pSE);
-        } break;
-        case NPCAI::State::WarpOut:
-        case NPCAI::State::WarpFollow:
-        case NPCAI::State::Fleeing:
-        case NPCAI::State::Signaling:{
-            _log(NPC__AI_TRACE, "%s(%u): Called %s - needs to be completed.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
-            m_state = NPCAI::State::Idle;
-            // not sure how im gonna do these
-        } break;
+                SystemEntity* pSE = m_npc->TargetMgr()->GetFirstTarget(false);
+                if (pSE == nullptr) {
+                    _log(NPC__AI_TRACE, "%s(%u): Stopped %s - GetFirstTarget() returned NULL.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
+                    SetIdle();
+                    return;
+                }
+                if (pSE->SysBubble() == nullptr) {
+                    ClearTarget(pSE);
+                    return;
+                }
+                CheckDistance(pSE);
+                if (m_missileTimer.Check())
+                    LaunchMissile(m_missileTypeID, pSE);
+            } break;
+            case NPCAI::State::WarpOut:
+            case NPCAI::State::WarpFollow:
+            case NPCAI::State::Fleeing:
+            case NPCAI::State::Signaling:{
+                _log(NPC__AI_TRACE, "%s(%u): Called %s - needs to be completed.", m_npc->GetName(), m_npc->GetID(), GetStateName(m_state).c_str());
+                m_state = NPCAI::State::Idle;
+                // not sure how im gonna do these
+            } break;
+        }
     }
 
     if (m_shieldBoosterTimer.Enabled())
@@ -364,6 +420,8 @@ void NPCAIMgr::Process() {
         if (m_armorRepairTimer.Check())
             m_npc->UseArmorRepairer();
 }
+
+
 
 bool NPCAIMgr::IsFighting() {
     // more to this here....

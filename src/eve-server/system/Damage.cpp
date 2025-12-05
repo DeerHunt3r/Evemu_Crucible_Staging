@@ -42,7 +42,8 @@
 #include "system/Container.h"
 #include "system/SystemBubble.h"
 #include "system/cosmicMgrs/AnomalyMgr.h"
-//#include "system/ConcordSpawner.h"
+#include "npc/concord/ConcordManager.h"
+#include "npc/concord/ConcordShips.h"
 
 
 
@@ -121,29 +122,90 @@ bool SystemEntity::ApplyDamage(Damage &d) {
         }
     }
 
-  // --------------------------------------------------------------------
-    // High-sec criminal aggression ? reactive CONCORD response (v1).
+    // --------------------------------------------------------------------
+    // ConcordV2 damage rules:
+    //  - If source is a CONCORD ship (commander/captain/drone) and the
+    //    target is NOT a recorded offender, we null out the damage.
+    //  - If the target IS a recorded offender, we greatly amplify damage
+    //    so that CONCORD effectively insta-kills once they land.
+    // --------------------------------------------------------------------
+    if (d.srcSE && d.srcSE->IsNPCSE()) {
+        NPC* npc = d.srcSE->GetNPCSE();
+        if (npc != nullptr) {
+            uint32 typeID = npc->GetSelf()->typeID();
+
+            const ConcordV2::ConcordShipTypes& types =
+                ConcordV2::ConcordShips::Instance().GetTypes();
+
+            if (typeID == types.policeCommanderTypeID ||
+                typeID == types.policeCaptainTypeID   ||
+                typeID == types.policeDroneTypeID)
+            {
+                const bool isOffender =
+                    ConcordV2::ConcordManager::Instance().IsOffender(this);
+
+                // 'this' is the damage recipient.
+                if (!isOffender) {
+                    if (is_log_enabled(DAMAGE__INFO)) {
+                        _log(DAMAGE__INFO,
+                             "%s(%u): Suppressing CONCORD damage from %s(%u) to non-offender.",
+                             GetName(), GetID(), npc->GetName(), npc->GetID());
+                    }
+
+                    // Zero out the damage; rest of ApplyDamage will effectively no-op.
+                    d *= 0.0f;
+                } else {
+                    // Offender: Concord should absolutely wreck them.
+                    // Multiplying by a large factor makes TTK extremely short.
+                    // Tune this multiplier if you want slightly slower/faster kills.
+                    const float concordDamageMultiplier = 25.0f;
+
+                    if (is_log_enabled(DAMAGE__INFO)) {
+                        _log(DAMAGE__INFO,
+                             "%s(%u): Amplifying CONCORD damage from %s(%u) against offender by %.1fx.",
+                             GetName(), GetID(), npc->GetName(), npc->GetID(), concordDamageMultiplier);
+                    }
+
+                    d *= concordDamageMultiplier;
+                }
+            }
+        }
+    }
+
+
+    // --------------------------------------------------------------------
+    // High-sec criminal aggression – Concord V2 notification hook.
     //
     // Rules:
     //  - Only in 0.5+ systems.
     //  - Only when a player ship damages another player ship.
-    //  - NPCs and drones do not trigger CONCORD.
-    //  - Uses m_system->GetSystemSecurityRating(), which your tree already uses.
+    //  - NPCs and drones do not trigger Concord.
+    //
+    // NOTE:
+    //  Concord V2 is currently inert:
+    //   - CrimeWatch::ClassifyCrime() always returns CrimeType::None
+    //   - ConcordTimers::GetResponseDelay() returns -1.0
+    //   - ConcordResponse::HandleCrime() is never called
+    //  So this hook only exercises the pipeline and does not change behavior.
     // --------------------------------------------------------------------
-  /*
     if (m_system && (m_system->GetSystemSecurityRating() >= 0.5)) {
         if (HasPilot() && d.srcSE && d.srcSE->HasPilot()) {
             Client* attacker = d.srcSE->GetPilot();
             Client* victim   = GetPilot();
 
             if (attacker && victim && (attacker != victim)) {
-                // Call into your CONCORD helper.
-                // If your implementation is named differently, adjust this line.
-                ConcordSpawner::OnCriminalAct(*m_system, attacker);
+                ConcordV2::CrimeEvent crime;
+                crime.offender       = d.srcSE;                      // attacker ship/entity
+                crime.victim         = this;                         // target ship/entity
+                crime.systemSecurity = m_system->GetSystemSecurityRating();
+                crime.solarSystemID  = m_system->GetID();
+                // crime.timestamp left at default (0.0) for now.
+
+                ConcordV2::ConcordManager::Instance().OnPossibleCrime(*m_system, crime);
             }
         }
     }
-*/
+
 
     int8 damageID(0);
     switch (d.weaponRef->groupID()) {

@@ -378,25 +378,32 @@ SET( missions_SOURCE
      "${TARGET_SOURCE_DIR}/missions/MissionMgrService.cpp" )
 
 SET( npc_INCLUDE
-     #"${TARGET_INCLUDE_DIR}/npc/Concord.h"
-     #"${TARGET_INCLUDE_DIR}/npc/ConcordSpawnMgr.h"
-     #"${TARGET_INCLUDE_DIR}/npc/ConcordAI.h"
      "${TARGET_INCLUDE_DIR}/npc/Drone.h"
      "${TARGET_INCLUDE_DIR}/npc/DroneAI.h"
      "${TARGET_INCLUDE_DIR}/npc/EntityService.h"
      "${TARGET_INCLUDE_DIR}/npc/NPC.h"
      "${TARGET_INCLUDE_DIR}/npc/NPCAI.h"
      "${TARGET_INCLUDE_DIR}/npc/Sentry.h"
-     "${TARGET_INCLUDE_DIR}/npc/SentryAI.h")
+     "${TARGET_INCLUDE_DIR}/npc/SentryAI.h"# Concord V2 headers (npc/concord/)
+     "${TARGET_INCLUDE_DIR}/npc/concord/ConcordLog.h"
+     "${TARGET_INCLUDE_DIR}/npc/concord/CrimeWatch.h"
+     "${TARGET_INCLUDE_DIR}/npc/concord/ConcordShips.h"
+     "${TARGET_INCLUDE_DIR}/npc/concord/ConcordTimers.h"
+     "${TARGET_INCLUDE_DIR}/npc/concord/ConcordResponse.h"
+     "${TARGET_SOURCE_DIR}/npc/concord/ConcordShips.cpp"
+     "${TARGET_INCLUDE_DIR}/npc/concord/ConcordManager.h" )
+     
 SET( npc_SOURCE
-     #"${TARGET_SOURCE_DIR}/npc/Concord.cpp"
-     #"${TARGET_SOURCE_DIR}/npc/ConcordSpawnMgr.cpp"
-     #"${TARGET_SOURCE_DIR}/npc/ConcordAI.cpp"
      "${TARGET_SOURCE_DIR}/npc/Drone.cpp"
      "${TARGET_SOURCE_DIR}/npc/DroneAI.cpp"
      "${TARGET_SOURCE_DIR}/npc/EntityService.cpp"
      "${TARGET_SOURCE_DIR}/npc/NPC.cpp"
-     "${TARGET_SOURCE_DIR}/npc/NPCAI.cpp"
+     "${TARGET_SOURCE_DIR}/npc/NPCAI.cpp" # Concord V2 sources (npc/concord/)
+     "${TARGET_SOURCE_DIR}/npc/concord/ConcordManager.cpp"
+     "${TARGET_SOURCE_DIR}/npc/concord/CrimeWatch.cpp"
+     "${TARGET_SOURCE_DIR}/npc/concord/ConcordResponse.cpp"
+     "${TARGET_SOURCE_DIR}/npc/concord/ConcordShips.cpp"
+     "${TARGET_SOURCE_DIR}/npc/concord/ConcordTimers.cpp"
      "${TARGET_SOURCE_DIR}/npc/Sentry.cpp"
      "${TARGET_SOURCE_DIR}/npc/SentryAI.cpp" )
 

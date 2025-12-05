@@ -172,7 +172,11 @@ bool ImageServer::ValidateSize(std::string& category, uint32 size)
         return size == 256 || size == 128 || size == 64 || size == 32;
 
     // Render and Character
-    return size == 1024 || size == 512 || size == 256 || size == 128 || size == 64 || size == 40 || size == 32;
+    if (category == "Render" || category == "Character")
+        return size > 0;
+
+    // fallback (unknown category)
+    return false;
 }
 
 bool ImageServer::ValidateCategory(std::string& category)

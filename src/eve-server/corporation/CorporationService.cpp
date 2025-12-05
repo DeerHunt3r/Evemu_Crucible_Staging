@@ -113,15 +113,37 @@ PyResult CorporationService::GetRecruitmentAdRegistryData(PyCallArgs& call)
     return args;
 }
 
-PyResult CorporationService::GetRecruitmentAdsByCriteria(PyCallArgs& call, PyInt* typeMask, PyBool* inAlliance, std::optional<PyInt*> minMembers, std::optional<PyInt*> maxMembers)
-{    //   return sm.RemoteSvc('corporationSvc').GetRecruitmentAdsByCriteria(typeMask, isInAlliance, minMembers, maxMembers)
+PyResult CorporationService::GetRecruitmentAdsByCriteria(PyCallArgs& call,
+                                                         PyInt* typeMask,
+                                                         PyInt* isInAlliance,
+                                                         PyInt* minMembers,
+                                                         PyInt* maxMembers)
+{
+    //   return sm.RemoteSvc('corporationSvc').GetRecruitmentAdsByCriteria(
+    //              typeMask, isInAlliance, minMembers, maxMembers)
     _log(CORP__CALL, "CorporationService::Handle_GetRecruitmentAdsByCriteria()");
     call.Dump(CORP__CALL_DUMP);
 
-    return m_db.GetAdRegistryData(
-        typeMask->value(), inAlliance->value(),
-        minMembers.has_value () ? minMembers.value ()->value() : 0,
-        maxMembers.has_value () ? maxMembers.value ()->value() : 0);
+    // Client passes all 4 args as integers:
+    //  typeMask:      bitmask of corp types
+    //  isInAlliance:  0/1
+    //  minMembers:    minimum member count
+    //  maxMembers:    maximum member count
+    const int64 typeMaskVal    = typeMask->value();
+    const bool  inAllianceFlag = (isInAlliance->value() != 0);
+    const int64 minMembersVal  = minMembers->value();
+    const int64 maxMembersVal  = maxMembers->value();
+
+    _log(CORP__TRACE,
+         "GetRecruitmentAdsByCriteria: typeMask=%" PRIi64
+         " inAlliance=%s minMembers=%" PRIi64 " maxMembers=%" PRIi64,
+         typeMaskVal,
+         inAllianceFlag ? "true" : "false",
+         minMembersVal,
+         maxMembersVal);
+
+    // Preserve the original semantics: filtered lookup in the corp recruitment DB.
+    return m_db.GetAdRegistryData(typeMaskVal, inAllianceFlag, minMembersVal, maxMembersVal);
 }
 
 PyResult CorporationService::GetRecruitmentAdsForCorporation(PyCallArgs& call)
@@ -132,7 +154,6 @@ PyResult CorporationService::GetRecruitmentAdsForCorporation(PyCallArgs& call)
 
     return m_db.GetAdRegistryData();
 }
-
 
 /**     ***********************************************************************
  * @note   these below are partially coded

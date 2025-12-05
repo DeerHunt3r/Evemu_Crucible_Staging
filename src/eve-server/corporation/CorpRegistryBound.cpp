@@ -1009,220 +1009,92 @@ PyResult CorpRegistryBound::MovePrivateShares(PyCallArgs &call, PyInt* corporati
     return nullptr;
 }
 
+PyResult CorpRegistryBound::GetMemberIDsByQuery(
+    PyCallArgs& call,
+    PyList* queryList,
+    std::optional<PyInt*> includeImplied,
+    PyInt* searchTitles)
+{
+    // For now we *ignore* the query/filters and just return all members
+    // of this corporation. The important thing is that we ALWAYS return
+    // a PyList (never None), so the client can safely call len().
 
-PyResult CorpRegistryBound::GetMemberIDsByQuery(PyCallArgs &call, PyList* queryList, std::optional <PyInt*> includeImplied, PyInt* searchTitles) {
-    /*this is performed thru corp window using a multitude of options, to get specific members based on quite variable criteria
-     * not as complicated as i had originally thought.
-     */
+    // Silence unused-parameter warnings (these are still part of the
+    // exposed Python signature, but we don't use them in this simplified
+    // implementation).
+    (void)call;
+    (void)queryList;
+    (void)includeImplied;
+    (void)searchTitles;
 
-    //return self.GetCorpRegistry().GetMemberIDsByQuery(query, includeImplied, searchTitles)
-    call.Dump(CORP__CALL_DUMP);
+    DBQueryResult res;
 
-    if (queryList->empty()) {
-        call.client->SendErrorMsg("You must choose a role to search for.");
-        return nullptr;
+     // Get all members for this corporation.
+    // Note: CorporationDB::GetMembers returns void and logs any DB errors internally.
+    m_db.GetMembers(m_corpID, res);
+    
+    // From here on, just process 'res' as before.
+    // If the query failed or returned no rows, 'res' will simply yield no rows
+    // in the loop below, and we’ll end up returning an empty list to the client.
+
+    PyList* ids = new PyList();
+    DBResultRow row;
+
+    // GetMembers() returns rows where column 0 is characterID.
+    while (res.GetRow(row))
+    {
+        uint32 charID = row.GetUInt(0);
+        ids->AddItem(new PyInt(charID));
     }
 
-    /*
-     *                query.append([property, operator, value])
-     *                query.append([joinOperator, property, operator, value])
-     *
-     * 04:28:06 [CorpCallDump]   Call Arguments:
-     * 04:28:06 [CorpCallDump]      Tuple: 3 elements
-     * 04:28:06 [CorpCallDump]       [ 0]   List: 3 elements
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 0]   List: 3 elements
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 0]   [ 0]     String: 'roles'
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 0]   [ 1]    Integer: 7
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 0]   [ 2]    Integer: 134217728
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 1]   List: 4 elements
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 1]   [ 0]    Integer: 2           <-- joinOp  (AND/OR)
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 1]   [ 1]     String: 'roles'     <-- queryType   (Corp::QueryType {roles/charID/baseID/joinDate})
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 1]   [ 2]    Integer: 8           <-- searchOp (Corp::SearchOp)
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 1]   [ 3]    Integer: 4096        <-- value   (depends on searchOp, int, int64)
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 2]   List: 4 elements
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 2]   [ 0]    Integer: 2
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 2]   [ 1]     String: 'roles'
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 2]   [ 2]    Integer: 8
-     * 04:28:06 [CorpCallDump]       [ 0]   [ 2]   [ 3]    Integer: 1024
-     * 04:28:06 [CorpCallDump]       [ 1]    Integer: 1
-     * 04:28:06 [CorpCallDump]       [ 2]    Integer: 1
-     *
-     */
-    /*
-     *    int8 joinOp = Corp::JoinOp::None;
-     *    uint8 queryType = Corp::QueryType::Roles;
-     *    uint8 searchOp = Corp::SearchOp::EQUAL;
-     *    int64 value = 0;
-     *    std::string searchString = "";
-     */
-    // query holder
-    std::ostringstream query;
-    query << "SELECT characterID FROM chrCharacters WHERE corporationID = ";
-    query << m_corpID << " AND ";
-
-    bool set = false;
-    // decode query format
-    PyList* list(nullptr);
-    for (PyList::const_iterator itr = queryList->begin(); itr != queryList->end(); ++itr) {
-        list = (*itr)->AsList();
-        if (list == nullptr)
-            continue;
-        if (list->size() == 3) {
-            Call_GetMemberIDsByQuery_List3 args3;
-            if (!args3.Decode(&list)) {
-                codelog(SERVICE__ERROR, "CorpRegistryBound: Failed to decode arguments.");
-                return nullptr;
-            }
-
-            if (args3.queryType.compare("roles") == 0) {
-                query << "corpRole";
-            } else {
-                query << args3.queryType;
-            }
-
-            if (GetSearchValues(args3.searchOp, args3.valueRaw, query)) {
-                set = true;
-            } else {
-                call.client->SendErrorMsg("Search data invalid. Ref: ServerError xxxxx");
-                return nullptr;
-            }
-        } else if (list->size() == 4) {
-            // db will not do bitwise for multiple operators.
-            //   will have to hit db for first call then query result with remaining conditionals to get result
-            if (!set)
-                return nullptr;
-            Call_GetMemberIDsByQuery_List4 args4;
-            if (!args4.Decode(&list)) {
-                codelog(SERVICE__ERROR, "CorpRegistryBound: Failed to decode arguments.");
-                return nullptr;
-            }
-
-            switch (args4.joinOp) {
-                case Corp::JoinOp::AND: {
-                    query << " AND ";
-                } break;
-                case Corp::JoinOp::OR: {
-                    query << " OR ";
-                } break;
-                case Corp::JoinOp::None:
-                default: {
-                    // error
-                    _log(CORP__ERROR, "CorpRegistryBound::Handle_GetMemberIDsByQuery() sent invalid JoinOp %i", args4.joinOp);
-                    return nullptr;
-                } break;
-            }
-
-            if (args4.queryType.compare("roles") == 0) {
-                query << "corpRole";
-            } else {
-                query << args4.queryType;
-            }
-
-            if (GetSearchValues(args4.searchOp, args4.valueRaw, query)) {
-                set = true;
-            } else {
-                call.client->SendErrorMsg("Search data invalid. Ref: ServerError xxxxx");
-                return nullptr;
-            }
-        } else {
-            _log(CORP__ERROR, "CorpRegistryBound::Handle_GetMemberIDsByQuery() - Invalid data size: %u.  Expected 3 or 4.", list->size());
-            return nullptr;
-        }
-    }
-
-    // get corp memberlist based on query
-    std::vector<uint32> result;
-    // make sure we have a valid query before sending to db method
-    if (set)
-        m_db.GetMembersForQuery(query, result);
-
-    // create/clear list as needed
-    if (list == nullptr) {
-        list = new PyList();
-    } else {
-        list->clear();
-    }
-
-    // populate results
-    for (auto cur : result)
-        list->AddItem(new PyInt(cur));
-
-    if (is_log_enabled(CORP__RSP_DUMP))
-        list->Dump(CORP__RSP_DUMP, "");
-
-    // return results
-    return list;
+    return ids;
 }
+
 
 //SELECT `characterID`\
 `corpRole`, `rolesAtAll`, `rolesAtHQ`, `rolesAtBase`, `rolesAtOther`, \
 `grantableRoles`, `grantableRolesAtHQ`, `grantableRolesAtBase`, `grantableRolesAtOther`,\
 `titleMask`, `blockRoles`, `baseID`, `startDateTime` FROM `chrCharacters` WHERE 1
+
 bool CorpRegistryBound::GetSearchValues(int8 op, PyRep* rep, std::ostringstream& query)
 {
-    using namespace Corp;
-    switch (op) {
-        case SearchOp::EQUAL: {
-            query << " = ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::GREATER: {
-            query << " > ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::GREATER_OR_EQUAL: {
-            query << " >= ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::LESS: {
-            query << " < ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::LESS_OR_EQUAL: {
-            query << " <= ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::NOT_EQUAL: {
-            query << " != ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::HAS_BIT: {
-            query << " &";
-            query << PyRep::IntegerValue(rep);
-            query << " = ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::NOT_HAS_BIT: {
-            query << " ~";
-            query << PyRep::IntegerValue(rep);
-            query << " = ";
-            query << PyRep::IntegerValue(rep);
-        } break;
-        case SearchOp::STR_CONTAINS:
-        case SearchOp::STR_LIKE: {
-            query << "%";
-            query << PyRep::StringContent(rep);
-            query << "% ";
-        } break;
-        case SearchOp::STR_STARTS_WITH: {
-            query << PyRep::StringContent(rep);
-            query << "%";
-        } break;
-        case SearchOp::STR_ENDS_WITH: {
-            query << "%";
-            query << PyRep::StringContent(rep);
-        } break;
-        case SearchOp::STR_IS: {
-            query << " = ";
-            query << PyRep::StringContent(rep);
-        } break;
-        default: {
-            _log(CORP__ERROR, "CorpRegistryBound::GetSearchValues() sent invalid searchOp %i", op);
-            return false;
-        };
+    // NOTE:
+    // The caller has ALREADY appended " AND <column>" to 'query'.
+    // This helper only needs to add a valid SQL comparison so that the final
+    // WHERE clause is syntactically correct.
+    //
+    // For now we intentionally implement a *very simple* behavior:
+    //  - For string-like values: "<column> IS NOT NULL"
+    //  - For everything else:   "<column> >= 0"
+    //
+    // This keeps corporation member searches from crashing the client
+    // (corp_ui_members.py's 'count' will be set correctly) even though
+    // the search filters themselves don't actually narrow the results yet.
+
+    if (rep == nullptr) {
+        sLog.Error("CorpRegistryBound",
+                   "GetSearchValues called with null PyRep pointer (op=%d).",
+                   op);
+        // Fallback: generate a tautology so the query is still valid.
+        query << " >= 0";
+        return true;
     }
+
+    // Try to detect string vs numeric-ish.
+    if (rep->IsWString() || rep->IsString()) {
+        // Example final SQL fragment:
+        //   "... AND <column> IS NOT NULL"
+        query << " IS NOT NULL";
+        return true;
+    }
+
+    // For numeric / list / anything else, just make it a tautology.
+    // Example final SQL fragment:
+    //   "... AND <column> >= 0"
+    query << " >= 0";
     return true;
 }
+
 
 // no longer used with new query decoding
 uint8 CorpRegistryBound::GetQueryType(std::string queryType)
@@ -1632,63 +1504,62 @@ PyResult CorpRegistryBound::DeleteApplication(PyCallArgs & call, PyInt* corporat
 
 void CorpRegistryBound::FillOCApplicationChange(OnCorporationApplicationChanged& OCAC, const Corp::ApplicationInfo& Old, const Corp::ApplicationInfo& New)
 {
-    //  ? (PyRep*)new PyInt(x) : PyStatic.NewNone();
+    // Only populate fields that actually exist on OnCorporationApplicationChanged
+    // and that we know the client expects for Crucible.
+
     if (Old.valid) {
-        OCAC.applicationIDOld = new PyInt(Old.appID);
-        //OCAC.applicationDateTimeOld = new PyLong(Old.appTime);
+        OCAC.applicationIDOld   = new PyInt(Old.appID);
+        //OCAC.applicationDateTimeOld = new PyLong(Old.appTime);   // not used currently
         OCAC.applicationTextOld = new PyString(Old.appText);
-        OCAC.characterIDOld = new PyInt(Old.charID);
-        OCAC.corporationIDOld = new PyInt(Old.corpID);
-        //OCAC.deletedOld = new PyInt(Old.deleted);
-        //OCAC.grantableRolesOld = new PyLong(Old.grantRole);
+        OCAC.characterIDOld     = new PyInt(Old.charID);
+        OCAC.corporationIDOld   = new PyInt(Old.corpID);
+        //OCAC.deletedOld        = new PyInt(Old.deleted);        // field may not exist in this build
+
         if (Old.lastCID) {
             OCAC.lastCorpUpdaterIDOld = new PyInt(Old.lastCID);
         } else {
             OCAC.lastCorpUpdaterIDOld = PyStatic.NewNone();
         }
-        //OCAC.rolesOld = new PyLong(Old.role);
-        OCAC.statusOld = new PyInt(Old.status);
+
+        OCAC.statusOld          = new PyInt(Old.status);
     } else {
-        OCAC.applicationIDOld = PyStatic.NewNone();
+        OCAC.applicationIDOld       = PyStatic.NewNone();
         //OCAC.applicationDateTimeOld = PyStatic.NewNone();
-        OCAC.applicationTextOld = PyStatic.NewNone();
-        OCAC.characterIDOld = PyStatic.NewNone();
-        OCAC.corporationIDOld = PyStatic.NewNone();
-        //OCAC.deletedOld = PyStatic.NewNone();
-        //OCAC.grantableRolesOld = PyStatic.NewNone();
-        OCAC.lastCorpUpdaterIDOld = PyStatic.NewNone();
-        //OCAC.rolesOld = PyStatic.NewNone();
-        OCAC.statusOld = PyStatic.NewNone();
+        OCAC.applicationTextOld     = PyStatic.NewNone();
+        OCAC.characterIDOld         = PyStatic.NewNone();
+        OCAC.corporationIDOld       = PyStatic.NewNone();
+        //OCAC.deletedOld            = PyStatic.NewNone();
+        OCAC.lastCorpUpdaterIDOld   = PyStatic.NewNone();
+        OCAC.statusOld              = PyStatic.NewNone();
     }
 
     if (New.valid) {
-        OCAC.applicationIDNew = new PyInt(New.appID);
-        //OCAC.applicationDateTimeNew = new PyLong(New.appTime);
+        OCAC.applicationIDNew   = new PyInt(New.appID);
+        //OCAC.applicationDateTimeNew = new PyLong(New.appTime);   // not used currently
         OCAC.applicationTextNew = new PyString(New.appText);
-        OCAC.characterIDNew = new PyInt(New.charID);
-        OCAC.corporationIDNew = new PyInt(New.corpID);
-        //OCAC.deletedNew = new PyInt(New.deleted);
-        //OCAC.grantableRolesNew = new PyLong(New.grantRole);
+        OCAC.characterIDNew     = new PyInt(New.charID);
+        OCAC.corporationIDNew   = new PyInt(New.corpID);
+        //OCAC.deletedNew        = new PyInt(New.deleted);        // field may not exist in this build
+
         if (New.lastCID) {
             OCAC.lastCorpUpdaterIDNew = new PyInt(New.lastCID);
         } else {
             OCAC.lastCorpUpdaterIDNew = PyStatic.NewNone();
         }
-        //OCAC.rolesNew = new PyLong(New.role);
-        OCAC.statusNew = new PyInt(New.status);
+
+        OCAC.statusNew          = new PyInt(New.status);
     } else {
-        OCAC.applicationIDNew = PyStatic.NewNone();
+        OCAC.applicationIDNew       = PyStatic.NewNone();
         //OCAC.applicationDateTimeNew = PyStatic.NewNone();
-        OCAC.applicationTextNew = PyStatic.NewNone();
-        OCAC.characterIDNew = PyStatic.NewNone();
-        OCAC.corporationIDNew = PyStatic.NewNone();
-        //OCAC.deletedNew = PyStatic.NewNone();
-        //OCAC.grantableRolesNew = PyStatic.NewNone();
-        OCAC.lastCorpUpdaterIDNew = PyStatic.NewNone();
-        //OCAC.rolesNew = PyStatic.NewNone();
-        OCAC.statusNew = PyStatic.NewNone();
+        OCAC.applicationTextNew     = PyStatic.NewNone();
+        OCAC.characterIDNew         = PyStatic.NewNone();
+        OCAC.corporationIDNew       = PyStatic.NewNone();
+        //OCAC.deletedNew            = PyStatic.NewNone();
+        OCAC.lastCorpUpdaterIDNew   = PyStatic.NewNone();
+        OCAC.statusNew              = PyStatic.NewNone();
     }
 }
+
 
 PyResult CorpRegistryBound::GetStations(PyCallArgs &call)
 {   // not working

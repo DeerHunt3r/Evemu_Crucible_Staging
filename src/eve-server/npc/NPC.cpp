@@ -36,12 +36,13 @@
 #include "system/Damage.h"
 #include "system/SystemManager.h"
 
-
 NPC::NPC(InventoryItemRef self, EVEServiceManager& services, SystemManager* system, const FactionData& data, SpawnMgr* spawnMgr)
 : DynamicSystemEntity(self, services, system),
 m_spawnMgr(spawnMgr),
 m_AI(new NPCAIMgr(this))
 {
+    m_concordPrimaryTarget = nullptr;
+
     m_allyID = data.allianceID;
     m_warID = data.factionID;
     m_corpID = data.corporationID;

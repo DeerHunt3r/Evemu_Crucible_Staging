@@ -81,6 +81,10 @@ public:
     NPCAIMgr* GetAIMgr()                                { return m_AI; }
     SpawnMgr* GetSpawnMgr()                             { return m_spawnMgr; }
 
+    /* ConcordV2 support: primary criminal target this NPC should focus. */
+    void SetConcordPrimaryTarget(SystemEntity* who)     { m_concordPrimaryTarget = who; }
+    SystemEntity* GetConcordPrimaryTarget() const       { return m_concordPrimaryTarget; }
+
     /* for command dropLoot - commands all npcs in bubble to jettison loot */
     void CmdDropLoot();
 
@@ -89,6 +93,7 @@ protected:
     SpawnMgr* m_spawnMgr;
 
 private:
+    SystemEntity* m_concordPrimaryTarget;
     uint32 m_orbitingID;
 
     float m_emDamage;
