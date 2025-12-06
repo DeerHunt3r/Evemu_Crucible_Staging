@@ -53,9 +53,11 @@ public:
     EvilNumber GetAttribute(uint32 attrID)              { return m_modRef->GetAttribute(attrID); }
 
     bool                isWarpSafe()                    { return m_isWarpSafe; }
+    bool                IsReactivationDelayed();    // new helper
     bool                isTurretFitted()                { return m_modRef->type().HasEffect(EVEEffectID::turretFitted); }
     bool                isLauncherFitted()              { return m_modRef->type().HasEffect(EVEEffectID::launcherFitted); }
 
+   
     /* class type pointer querys, public for anyone to access. */
     virtual ActiveModule*       GetActiveModule()       { return nullptr; }
     virtual PassiveModule*      GetPassiveModule()      { return nullptr; }
@@ -76,16 +78,19 @@ public:
     virtual bool        IsRigModule() const             { return false; }   // check this in m_rigSlot?
     virtual bool        IsSubSystemModule() const       { return false; }   // check this in m_subSystem?
 
-    bool                IsLoaded()                      { return (m_chargeLoaded and (m_chargeRef.get() != nullptr)); }
+    bool                IsLoaded()                      { return (m_chargeLoaded && (m_chargeRef.get() != nullptr)); }
     bool                IsTurretModule()                { return m_turret; }
     bool                IsLauncherModule()              { return m_launcher; }
     bool                IsOverloaded()                  { return m_overLoaded; }
     bool                IsLinked()                      { return m_linked; }
     bool                IsMaster()                      { return m_linkMaster; }
     bool                IsDamaged()                     { return m_modRef->GetAttribute(AttrDamage) != EvilZero; }
-    bool                IsActive()                      { return (m_ModuleState == Module::State::Activated ? true : m_ModuleState == Module::State::Deactivating ? true : false); }
-    bool                IsLoading()                     { return m_ModuleState == Module::State::Loading; }
 
+    // Current activity state helpers
+    bool                IsActive();         // defined in GenericModule.cpp
+    bool                IsLoading()         { return m_ModuleState == Module::State::Loading; }
+
+   
     /* generic access functions handled here, but set elsewhere. */
     bool                isOnline()                      { return m_modRef->IsOnline(); }
     bool                isLowPower()                    { return m_loPower; }
@@ -100,7 +105,7 @@ public:
     EVEItemFlags        flag()                          { return m_modRef->flag(); }
 
     void SetChargeRef(InventoryItemRef iRef)            { m_chargeRef = iRef; }
-    void SetModuleState(int8 state)                     { m_ModuleState = state; }
+    void SetModuleState(int8 state);                     //now implemented in .cpp
     void SetChargeState(int8 state)                     { m_ChargeState = state; }
     void SetLinked(bool set=false)                      { m_linked = set; }
     void SetLinkMaster(bool set=false)                  { m_linkMaster = set; }
@@ -154,6 +159,8 @@ protected:
     int8                m_ModuleState;
     int8                m_ChargeState;
 
+    int64               m_nextActivationTime;   // absolute time in useconds when module may be reactivated
+
     int16               m_repeat;
 
     bool                m_linkMaster   :1;
@@ -168,6 +175,7 @@ protected:
     bool                m_turret       :1;
     bool                m_overLoaded   :1;
     bool                m_chargeLoaded :1;
+
 };
 
 #endif  // _EVE_SHIP_MODULES_GENERIC_MODULE_H

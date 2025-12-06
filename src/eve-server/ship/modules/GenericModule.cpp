@@ -26,6 +26,7 @@ m_shipRef(sRef),
 m_chargeRef(InventoryItemRef(nullptr)),
 m_ModuleState(Module::State::Unfitted),
 m_ChargeState(Module::State::Unloaded),
+m_nextActivationTime(0),
 m_linked(false),
 m_linkMaster(false),
 m_isWarpSafe(false),
@@ -39,6 +40,8 @@ m_subSystem(false),
 m_turret(false),
 m_launcher(false)
 {
+
+
     if (mRef->type().HasEffect(EVEEffectID::loPower)) {
         m_loPower = true;
     } else if (mRef->type().HasEffect(EVEEffectID::medPower)) {
@@ -62,6 +65,25 @@ m_launcher(false)
 
     // this function must NOT throw
     // throwing an error negates further processing
+    
+void GenericModule::SetModuleState(int8 state)
+{
+    // When leaving the Activated state, record a reactivation delay if the module defines one.
+    if ((m_ModuleState == Module::State::Activated) && (state != Module::State::Activated)) {
+        // Some modules (for example cloaks, MJDs, certain EWAR) declare a module reactivation delay.
+        if (m_modRef->HasAttribute(AttrModuleReactivationDelay)) {
+            EvilNumber delay = m_modRef->GetAttribute(AttrModuleReactivationDelay);
+            // Crucible static data stores this in seconds; convert to microseconds for our timer.
+            if (delay.get_float() > 0.0f) {
+                double nowUS = GetTimeUSeconds();
+                double delayUS = delay.get_float() * 1000000.0;
+                m_nextActivationTime = static_cast<int64>(nowUS + delayUS);
+            }
+        }
+    }
+
+    m_ModuleState = state;
+}
 
 
 void GenericModule::Online()
@@ -197,6 +219,22 @@ void GenericModule::Online()
         m_shipRef.get(),
         !m_shipRef->IsUndocking());
 }
+  
+  bool GenericModule::IsReactivationDelayed()
+{
+    if (m_nextActivationTime <= 0)
+        return false;
+
+    double nowUS = GetTimeUSeconds();
+    if (nowUS >= static_cast<double>(m_nextActivationTime)) {
+        // Reactivation delay has expired; clear it and allow activation.
+        m_nextActivationTime = 0;
+        return false;
+    }
+
+    return true;
+}
+ 
     
 void GenericModule::Offline()
 {
@@ -327,6 +365,14 @@ void GenericModule::ProcessEffects(int8 state, bool active/*false*/)
             sFxProc.ParseExpression(m_modRef.get(), sFxDataMgr.GetExpression(it.second.postExpression), data, this);
         }
     }
+}
+
+bool GenericModule::IsActive()
+{
+    // A module is considered "active" while fully activated
+    // or in the process of shutting down its last cycle.
+    return (m_ModuleState == Module::State::Activated
+         || m_ModuleState == Module::State::Deactivating);
 }
 
 // not used

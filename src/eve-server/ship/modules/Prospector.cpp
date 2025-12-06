@@ -122,30 +122,82 @@ uint32 Prospector::DoCycle()
 void Prospector::SendFailure()
 {
     if (m_salvager) {
-        PyTuple* type = new PyTuple(2);
-            type->SetItem(0, new PyInt(4));
-            type->SetItem(1, new PyInt(m_targetSE->GetTypeID()));
-        PyDict* dict = new PyDict;
-            dict->SetItemString("type", type);
-        PyTuple* tup = new PyTuple(3);
-            tup->SetItem(0, new PyString("OnRemoteMessage"));
-            tup->SetItem(1, new PyString("SalvagingFailure"));
-            tup->SetItem(2, dict);
-        m_shipRef->GetPilot()->QueueDestinyEvent(&tup);
+        if (m_targetSE != nullptr) {
+            PyTuple* type = new PyTuple(2);
+                type->SetItem(0, new PyInt(4));                         // cacheSolarSystemObjects category
+                type->SetItem(1, new PyInt(m_targetSE->GetTypeID()));
+            PyDict* dict = new PyDict;
+                dict->SetItemString("type", type);
+            PyTuple* tup = new PyTuple(3);
+                tup->SetItem(0, new PyString("OnRemoteMessage"));
+                tup->SetItem(1, new PyString("SalvagingFailure"));
+                tup->SetItem(2, dict);
+            m_shipRef->GetPilot()->QueueDestinyEvent(&tup);
+        } else {
+            // Target vanished; just skip the message rather than crashing.
+        }
     }
+
     if (m_dataMiner) {
-        // not sure what client needs from this
+        // TODO: implement proper failure notification for data analyzers, as needed.
     }
 }
 
 void Prospector::CheckSuccess()
 {
-    int8 chance(m_accessChance + GetAttribute(AttrAccessDifficultyBonus).get_int());
-    uint8 roll(MakeRandomInt(0,100));
-    if (roll < chance)
-        m_success = true;
+    // Safety: if we lost our target or ship, this cycle cannot succeed.
+    if ((m_targetSE == nullptr) || !m_shipRef) {
+        m_success = false;
+        _log(MODULE__DEBUG,
+             "Prospector::CheckSuccess - no target or ship, forced failure.");
+        return;
+    }
 
-    _log(MODULE__DEBUG, "Prospector::CheckSuccess - chance: %i, roll: %u, success: %s", chance, roll, (m_success ? "true" : "false"));
+    // 1) Base difficulty comes from the wreck.
+    // CCP data (Crucible era) was typically:
+    //   Small T1:  30
+    //   Medium T1: 20
+    //   Large T1:  10
+    //   Elite/T2/Sleeper: 0, -10, -20, etc.
+    //
+    // In EVEmu this should be in the wreck item as AttrAccessDifficulty.
+    int baseDifficulty = 0;
+    {
+        InventoryItemRef selfRef = m_targetSE->GetSelf();
+        if (selfRef.get() != nullptr) {
+            baseDifficulty = selfRef->GetAttribute(AttrAccessDifficulty).get_int();
+        }
+    }
+
+    // 2) Bonus comes from everything on the player **using a Salvager module**:
+    //    - Salvager I / II
+    //    - Salvaging skill
+    //    - Salvage Tackle rigs
+    //    - Prospector Salvaging implant
+    //
+    // Dogma aggregates all of that into AttrAccessDifficultyBonus for this module.
+    int bonus = GetAttribute(AttrAccessDifficultyBonus).get_int();
+
+    // 3) Final chance is base + bonus, treated as a percentage.
+    int chance = baseDifficulty + bonus;
+
+    // Clamp to 0–100% so bad data can't give negative or >100%.
+    if (chance < 0)
+        chance = 0;
+    else if (chance > 100)
+        chance = 100;
+
+    // 4) Roll 0–99 so 'chance' behaves like a straight percentage.
+    const uint8 roll = MakeRandomInt(0, 99);
+    m_success = (roll < chance);
+
+    _log(MODULE__DEBUG,
+         "Prospector::CheckSuccess - baseDifficulty=%d, bonus=%d, finalChance=%d%%, roll=%u, result=%s",
+         baseDifficulty,
+         bonus,
+         chance,
+         roll,
+         (m_success ? "SUCCESS" : "FAILURE"));
 }
 
 void Prospector::DropSalvage()
@@ -153,9 +205,13 @@ void Prospector::DropSalvage()
     if (m_targetSE == nullptr)
         return;
 
+    // 1) Roll salvage table for this wreck.
     std::vector<uint32> list;
     list.clear();
     sDataMgr.GetSalvage(atoi(m_targetSE->GetSelf()->customInfo().c_str()), list);
+
+    // Salvage items to be placed into the jetcan.
+    std::vector<InventoryItemRef> salvageItems;
 
     if (!list.empty()) {
         uint8 drop = 0;
@@ -168,67 +224,77 @@ void Prospector::DropSalvage()
             case -20: drop = 6; break;  //  6 to 18
         }
 
-        InventoryItemRef iRef(nullptr);
-        Inventory* sInv(m_shipRef->GetMyInventory());
         uint32 quantity = 0, minDrop = drop, maxDrop = (drop * sConfig.rates.DropSalvage);
         for (auto cur : list) {
             // each drop has 50/50 chance.  may need to change this later.   base on char's salvage skill?
             if (IsEven(MakeRandomInt(0,10)))
                 continue;
+
             quantity = (MakeRandomInt(minDrop, maxDrop));
             ItemData iLoot(cur, pChar->itemID(), locTemp, flagNone, quantity);
-            iRef = sItemFactory.SpawnItem(iLoot);
+            InventoryItemRef iRef = sItemFactory.SpawnItem(iLoot);
             if (iRef.get() == nullptr) // we'll get over it...continue
                 continue;
-            if (sInv->HasAvailableSpace(m_holdFlag, iRef)) {
-                //iRef->Move(m_shipRef->itemID(), m_holdFlag, true);
-                iRef->MergeTypesInCargo(m_shipRef.get(), m_holdFlag);
-                _log(MODULE__DEBUG, "Prospector::DropSalvage - dropped %u %s of %u/%u", quantity, iRef->name(), minDrop, maxDrop);
-            } else {
-                _log(MODULE__DEBUG, "Prospector::DropSalvage - %s's %s is full.", m_shipRef->name(), sDataMgr.GetFlagName(m_holdFlag));
-                m_shipRef->GetPilot()->SendNotifyMsg("Your %s is full.  Remaining salvage is lost.", sDataMgr.GetFlagName(m_holdFlag));
-                break;
-            }
+
+            salvageItems.push_back(iRef);
+            _log(MODULE__DEBUG,
+                 "Prospector::DropSalvage - generated %u %s of %u/%u for jetcan",
+                 quantity, iRef->name(), minDrop, maxDrop);
         }
     }
 
-    if (!m_targetSE->GetSelf()->GetMyInventory()->IsEmpty()) {
-        //{'FullPath': u'UI/Messages', 'messageID': 258062, 'label': u'SalvageTooMuchLootBody'}(u'You cannot salvage this wreck because it contains too much loot to fit into a single cargo container. <br>\r\nThe wreck contains <b>{[numeric]volume, useGrouping} m3</b> but can contain no more than <b>{[numeric]maxvolume, useGrouping} m3</b> to be salvageable.', None, {u'{[numeric]maxvolume, useGrouping}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 32, 'kwargs': {}, 'variableName': 'maxvolume'}, u'{[numeric]volume, useGrouping}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 32, 'kwargs': {}, 'variableName': 'volume'}})
+    // 2) Collect any existing loot from the wreck itself.
+    std::map<uint32, InventoryItemRef> shipLoot;
+    shipLoot.clear();
+    m_targetSE->GetSelf()->GetMyInventory()->GetInventoryMap(shipLoot);
 
-        // tell wreck it's being salvaged, so do not broadcast slim updates...may no longer need this.  jetcan set to initial location 0
+    // If there is nothing at all to drop, just mark the wreck salvaged and bail.
+    if (shipLoot.empty() && salvageItems.empty()) {
         m_targetSE->GetWreckSE()->Salvaged();
-
-        std::map<uint32, InventoryItemRef> shipLoot;
-        shipLoot.clear();
-        m_targetSE->GetSelf()->GetMyInventory()->GetInventoryMap(shipLoot);
-
-        // create new container
-        ItemData p_idata(23,   // 23 = cargo container
-                        m_targetSE->GetSelf()->ownerID(),
-                        locTemp,
-                        flagNone,
-                        "Jettisoned Loot Container",
-                        m_targetSE->GetPosition());
-
-        CargoContainerRef jetCanRef = sItemFactory.SpawnCargoContainer(p_idata);
-        if (jetCanRef.get() != nullptr) {
-            for (auto cur : shipLoot)
-                cur.second->Move(jetCanRef->itemID(),flagNone);
-            FactionData data = FactionData();
-                data.allianceID = m_targetSE->GetAllianceID();
-                data.corporationID = m_targetSE->GetCorporationID();
-                data.factionID = m_targetSE->GetWarFactionID();
-                data.ownerID = m_targetSE->GetSelf()->ownerID();
-            ContainerSE* cSE = new ContainerSE(jetCanRef, m_targetSE->GetServices(), m_sysMgr, data);
-            jetCanRef->SetMySE(cSE);
-            m_sysMgr->AddEntity(cSE);
-            m_targetSE->DestinyMgr()->SendJettisonPacket();
-        }
+        sStatMgr.Increment(Stat::shipsSalvaged);
+        return;
     }
 
-    // add data to StatisticMgr
+    //{'FullPath': u'UI/Messages', 'messageID': 258062, 'label': u'SalvageTooMuchLootBody'}
+    //  You cannot salvage this wreck because it contains too much loot to fit into a single cargo container...
+    //  (volume logic not yet implemented; we always spawn one container)
+
+    // 3) Tell wreck it's being salvaged, so do not broadcast slim updates...
+    m_targetSE->GetWreckSE()->Salvaged();
+
+    // 4) Create new container at the wreck's position.
+    ItemData p_idata(23,   // 23 = cargo container
+                    m_targetSE->GetSelf()->ownerID(),
+                    locTemp,
+                    flagNone,
+                    "Jettisoned Loot Container",
+                    m_targetSE->GetPosition());
+
+    CargoContainerRef jetCanRef = sItemFactory.SpawnCargoContainer(p_idata);
+    if (jetCanRef.get() != nullptr) {
+        // Move original wreck loot into the jetcan.
+        for (auto cur : shipLoot)
+            cur.second->Move(jetCanRef->itemID(), flagNone);
+
+        // Move all generated salvage into the same jetcan.
+        for (auto cur : salvageItems)
+            cur->Move(jetCanRef->itemID(), flagNone);
+
+        FactionData data = FactionData();
+            data.allianceID   = m_targetSE->GetAllianceID();
+            data.corporationID = m_targetSE->GetCorporationID();
+            data.factionID    = m_targetSE->GetWarFactionID();
+            data.ownerID      = m_targetSE->GetSelf()->ownerID();
+        ContainerSE* cSE = new ContainerSE(jetCanRef, m_targetSE->GetServices(), m_sysMgr, data);
+        jetCanRef->SetMySE(cSE);
+        m_sysMgr->AddEntity(cSE);
+        m_targetSE->DestinyMgr()->SendJettisonPacket();
+    }
+
+    // 5) add data to StatisticMgr
     sStatMgr.Increment(Stat::shipsSalvaged);
 }
+
 
 void Prospector::DropItems()
 {

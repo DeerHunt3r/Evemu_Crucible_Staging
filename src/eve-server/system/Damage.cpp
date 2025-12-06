@@ -126,8 +126,8 @@ bool SystemEntity::ApplyDamage(Damage &d) {
     // ConcordV2 damage rules:
     //  - If source is a CONCORD ship (commander/captain/drone) and the
     //    target is NOT a recorded offender, we null out the damage.
-    //  - If the target IS a recorded offender, we greatly amplify damage
-    //    so that CONCORD effectively insta-kills once they land.
+    //  - If the target IS a recorded offender, we amplify damage to an
+    //    extreme level so that any successful hit will destroy the ship.
     // --------------------------------------------------------------------
     if (d.srcSE && d.srcSE->IsNPCSE()) {
         NPC* npc = d.srcSE->GetNPCSE();
@@ -155,14 +155,13 @@ bool SystemEntity::ApplyDamage(Damage &d) {
                     // Zero out the damage; rest of ApplyDamage will effectively no-op.
                     d *= 0.0f;
                 } else {
-                    // Offender: Concord should absolutely wreck them.
-                    // Multiplying by a large factor makes TTK extremely short.
-                    // Tune this multiplier if you want slightly slower/faster kills.
-                    const float concordDamageMultiplier = 25.0f;
+                    // Offender: Concord should absolutely delete them.
+                    // Use an absurd multiplier so any hit is lethal regardless of tank.
+                    const float concordDamageMultiplier = 1000000.0f;
 
                     if (is_log_enabled(DAMAGE__INFO)) {
                         _log(DAMAGE__INFO,
-                             "%s(%u): Amplifying CONCORD damage from %s(%u) against offender by %.1fx.",
+                             "%s(%u): LETHAL CONCORD hit from %s(%u) against offender (x%.0f).",
                              GetName(), GetID(), npc->GetName(), npc->GetID(), concordDamageMultiplier);
                     }
 
@@ -171,6 +170,7 @@ bool SystemEntity::ApplyDamage(Damage &d) {
             }
         }
     }
+
 
 
     // --------------------------------------------------------------------

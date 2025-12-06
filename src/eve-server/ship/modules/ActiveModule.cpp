@@ -788,21 +788,34 @@ void ActiveModule::DeactivateCycle(bool abort/*false*/)
         //case EVEDB::invGroups::Data_Miner:
         // some data containers will pop after successful access.  currently incomplete
         case EVEDB::invGroups::Salvager: {
-            if (m_targetSE == nullptr)
-                break;
-            if (IsSuccess()) {
-                _log(MODULE__DEBUG, "%s - DeactivateCycle() - Salvage successful.  deleting target %s.", m_modRef->name(), m_targetSE->GetName());
-                m_targMgr->RemoveTarget(m_targetSE);
-                //m_targMgr->OnTarget(m_targetSE, TargMgr::Mode::Lost, TargMgr::Msg::Destroyed);
-                // just in case other modules are targeting this object, let them know it was destroyed.
-                if (m_targetSE->TargetMgr() != nullptr) {
-                    m_targetSE->TargetMgr()->RemoveTargetModule(this);
-                    m_targetSE->TargetMgr()->Destroyed();
-                }
-                m_targetSE->Delete();
-                SafeDelete(m_targetSE);
-            }
-        } break;
+    if (m_targetSE == nullptr)
+        break;
+
+    if (IsSuccess()) {
+        _log(MODULE__DEBUG,
+             "%s - DeactivateCycle() - Salvager finished on target %s (ID %u).",
+             m_modRef->name(), m_targetSE->GetName(), m_targetSE->GetID());
+
+        // Remove this target from our ship’s target manager
+        if (m_targMgr != nullptr) {
+            m_targMgr->RemoveTarget(m_targetSE);
+        }
+
+        // Let the target’s target manager know this module is no longer tracking it
+        if (m_targetSE->TargetMgr() != nullptr) {
+            m_targetSE->TargetMgr()->RemoveTargetModule(this);
+            // NOTE:
+            // Do NOT call TargetMgr()->Destroyed() here unless you're sure that's
+            // the correct semantic for "wreck is gone" in your build.
+            // Wreck/system code will clean up the entity properly.
+        }
+
+        // Do NOT delete the SystemEntity here; the system/bubble owns it.
+        m_targetID = 0;
+        m_targetSE = nullptr;
+    }
+} break;
+
         /*
         case EVEDB::invGroups::Warp_Scrambler: {
             if (m_targetSE != nullptr)

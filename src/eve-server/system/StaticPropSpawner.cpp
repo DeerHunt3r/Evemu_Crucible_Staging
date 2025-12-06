@@ -1,19 +1,18 @@
 /************************************************************************************
  * StaticPropSpawner.cpp
  *
- * Pure C++ gate + station environment spawner (billboards + sentry guns).
+ * Pure C++ static environment spawner for:
+ *  - Gate environments (billboards + sentry guns + optional civilians)
+ *  - Station environments (sentry guns + optional civilians)
+ *  - Subspace beacons near gates
  *
- * - NO dependency on spawns / spawnGroups / spawnGroupEntries / spawnBounds tables.
- * - For each system, when SpawnForSystem() is called:
- *      - Uses SystemManager::GetGates()    to find all stargates in that system.
- *      - Uses SystemManager::GetEntities() and IsStationSE() to find stations.
- *      - Applies C++ "environment templates" around each anchor:
- *          - Gates: billboards + sentry rings (+ optional civilians)
- *          - Stations: sentry rings (+ optional civilians)
+ * NO dependency on:
+ *  - spawns
+ *  - spawnGroups
+ *  - spawnGroupEntries
+ *  - spawnBounds
  *
- * - Only the CURRENT system is touched; no universe-wide spawning.
- * - Sentry gun types are chosen based on the owning faction of the region
- *   (Amarr, Caldari, Gallente, Minmatar) using StaticDataMgr.
+ * All placement logic is template-driven here in C++.
  ************************************************************************************/
 
 #include "eve-server.h"
@@ -23,34 +22,35 @@
 #include "inventory/ItemFactory.h"
 #include "inventory/InventoryItem.h"
 #include "system/SystemEntity.h"
-#include "npc/Sentry.h"
-#include "StaticDataMgr.h"
+#include "system/BubbleManager.h"
 #include "EVEServerConfig.h"
+#include "StaticDataMgr.h"
+#include "npc/Sentry.h"
+#include "system/Celestial.h"
+
+// For FACTION_* ids and region → faction lookups
+//#include "EVEDB/InvTypes.h"
 
 namespace
 {
-    // ---- CONFIG: typeIDs for environment props ---------------------------------
+    // -------------------------------------------------------------------------
+    //  CONFIG
+    // -------------------------------------------------------------------------
 
-    // Billboard: CONCORD billboard.
-    static const uint32 kBillboardTypeID        = 11136;
+    // Static prop typeIDs
+    static const uint32 kBillboardTypeID        = 11136;   // Concord billboard
+    static const uint32 kDefaultSentryGunTypeID = 3742;    // Gallente sentry gun as fallback
+    static const uint32 kCivilianTypeID         = 0;       // 0 = disabled for now
 
-    // Default generic sentry (used as fallback and also for Gallente).
-    static const uint32 kDefaultSentryGunTypeID = 3742;
+    // Owner for all gate/station props (can refine later to empire corps etc.)
+    static const uint32 kPropOwnerID = 1;                  // "system" / generic NPC owner
 
-    // Civilian ship type (0 = disabled for now).
-    static const uint32 kCivilianTypeID         = 0;
+    // Subspace beacon type
+    static const uint32 kSubspaceBeaconTypeID   = 30391;   // Subspace Beacon
 
-    // Owner for static gate/station props. You can change this later to a factionID/system owner/etc.
-    static const uint32 kPropOwnerID            = 1;  // 1 is commonly used NPC/system owner
-
-    // ---- Faction IDs (EVE static data) -----------------------------------------
-
-    static const uint32 FACTION_CALDARI   = 500001;
-    static const uint32 FACTION_MINMATAR  = 500002;
-    static const uint32 FACTION_AMARR     = 500003;
-    static const uint32 FACTION_GALLENTE  = 500004;
-
-    // ---- Generic environment template ------------------------------------------
+    // -------------------------------------------------------------------------
+    //  Environment template
+    // -------------------------------------------------------------------------
 
     struct EnvironmentTemplate
     {
@@ -59,66 +59,56 @@ namespace
         std::vector<GPoint> civilianOffsets;
     };
 
-    /**
-     * Layout tuned to approximate TQ:
-     *
-     *  - Billboard:
-     *      ~30 km from the anchor along +X.
-     *
-     *  - Sentry guns:
-     *      - 8 guns total, 4 "top" and 4 "bottom".
-     *      - Each gun is ~50 km from the anchor.
-     *      - Top ring is ~70 km above bottom ring.
-     *      - Guns in each ring are ~50 km apart from their neighbors.
-     *
-     *  We achieve this by:
-     *      vertical half-gap h = 35 km
-     *      radial distance R   = 50 km
-     *      horizontal radius d = sqrt(R^2 - h^2) ≈ 35.7 km
-     *
-     *  Top ring:    y = +35 km, circle radius d in X/Z
-     *  Bottom ring: y = -35 km, circle radius d in X/Z
-     */
-
+    // Gates:
+    //  - 1 billboard ~30km ahead of gate on +X
+    //  - 8 sentries in a "box" 50km from gate center:
+    //      * 4 "top" at +Y, spaced on X/Z
+    //      * 4 "bottom" at -Y, spaced on X/Z
     EnvironmentTemplate GetGateEnvironmentTemplate()
     {
         EnvironmentTemplate tpl;
 
-        // Billboard: 30 km along +X from the gate
-        const double kBillboardDist = 30000.0;  // 30 km
-        tpl.billboardOffsets.push_back(GPoint(kBillboardDist, 0.0, 0.0));
+        // Billboard ~30km in front of gate (arbitrary +X direction)
+        tpl.billboardOffsets.push_back(GPoint(30000.0, 0.0, 0.0));
 
-        // Sentry layout parameters
-        const double kSentryRadius        = 50000.0;  // 50 km from anchor
-        const double kSentryVerticalHalf  = 35000.0;  // +/- 35 km => 70 km separation
-        const double kSentryHorizRadiusSq = (kSentryRadius * kSentryRadius) -
-                                            (kSentryVerticalHalf * kSentryVerticalHalf);
-        const double kSentryHorizRadius   = (kSentryHorizRadiusSq > 0.0)
-                                            ? std::sqrt(kSentryHorizRadiusSq)
-                                            : 0.0;    // ~35.7 km
+        // Sentry box for gates:
+        // Distance from gate center in Y (vertical) and X/Z (horizontal)
+        const double kGateSentryRadius       = 50000.0; // 50 km
+        const double kGateSentryVerticalHalf = 35000.0; // +/- 35 km
+        const double kGateSentryHorizRadiusSq =
+            (kGateSentryRadius * kGateSentryRadius) -
+            (kGateSentryVerticalHalf * kGateSentryVerticalHalf);
 
-        const double d = kSentryHorizRadius;
-        const double h = kSentryVerticalHalf;
+        const double kGateSentryHorizRadius =
+            (kGateSentryHorizRadiusSq > 0.0)
+                ? std::sqrt(kGateSentryHorizRadiusSq)
+                : 0.0;
 
-        // Top ring (y = +h)
-        tpl.sentryOffsets.push_back(GPoint( d,  h,  0));  // +X
-        tpl.sentryOffsets.push_back(GPoint(-d,  h,  0));  // -X
-        tpl.sentryOffsets.push_back(GPoint( 0,  h,  d));  // +Z
-        tpl.sentryOffsets.push_back(GPoint( 0,  h, -d));  // -Z
+        const double d = kGateSentryHorizRadius;
+        const double h = kGateSentryVerticalHalf;
 
-        // Bottom ring (y = -h)
-        tpl.sentryOffsets.push_back(GPoint( d, -h,  0));  // +X
-        tpl.sentryOffsets.push_back(GPoint(-d, -h,  0));  // -X
-        tpl.sentryOffsets.push_back(GPoint( 0, -h,  d));  // +Z
-        tpl.sentryOffsets.push_back(GPoint( 0, -h, -d));  // -Z
+        // Top ring
+        tpl.sentryOffsets.push_back(GPoint( d,  h,  0));
+        tpl.sentryOffsets.push_back(GPoint(-d,  h,  0));
+        tpl.sentryOffsets.push_back(GPoint( 0,  h,  d));
+        tpl.sentryOffsets.push_back(GPoint( 0,  h, -d));
 
-        // Civilians (still disabled unless kCivilianTypeID != 0)
+        // Bottom ring
+        tpl.sentryOffsets.push_back(GPoint( d, -h,  0));
+        tpl.sentryOffsets.push_back(GPoint(-d, -h,  0));
+        tpl.sentryOffsets.push_back(GPoint( 0, -h,  d));
+        tpl.sentryOffsets.push_back(GPoint( 0, -h, -d));
+
+        // Civilians (disabled unless kCivilianTypeID != 0)
         tpl.civilianOffsets.push_back(GPoint( 20000.0,  5000.0,  5000.0));
         tpl.civilianOffsets.push_back(GPoint(-20000.0, -5000.0, -5000.0));
 
         return tpl;
     }
 
+    // Stations:
+    //  - No billboard at stations (for now)
+    //  - 8 sentries in a similar box around the station
     EnvironmentTemplate GetStationEnvironmentTemplate()
     {
         EnvironmentTemplate tpl;
@@ -127,11 +117,14 @@ namespace
 
         const double kSentryRadius        = 50000.0;  // 50 km from station
         const double kSentryVerticalHalf  = 35000.0;  // +/- 35 km
-        const double kSentryHorizRadiusSq = (kSentryRadius * kSentryRadius) -
-                                            (kSentryVerticalHalf * kSentryVerticalHalf);
-        const double kSentryHorizRadius   = (kSentryHorizRadiusSq > 0.0)
-                                            ? std::sqrt(kSentryHorizRadiusSq)
-                                            : 0.0;
+        const double kSentryHorizRadiusSq =
+            (kSentryRadius * kSentryRadius) -
+            (kSentryVerticalHalf * kSentryVerticalHalf);
+
+        const double kSentryHorizRadius =
+            (kSentryHorizRadiusSq > 0.0)
+                ? std::sqrt(kSentryHorizRadiusSq)
+                : 0.0;
 
         const double d = kSentryHorizRadius;
         const double h = kSentryVerticalHalf;
@@ -148,40 +141,61 @@ namespace
         tpl.sentryOffsets.push_back(GPoint( 0, -h,  d));
         tpl.sentryOffsets.push_back(GPoint( 0, -h, -d));
 
-        // Civilians (same pattern as gates, for now)
+        // Civilians (same pattern as gates for now)
         tpl.civilianOffsets.push_back(GPoint( 20000.0,  5000.0,  5000.0));
         tpl.civilianOffsets.push_back(GPoint(-20000.0, -5000.0, -5000.0));
 
         return tpl;
     }
 
-    // ---- Faction → sentry gun mapping -----------------------------------------
+    // -------------------------------------------------------------------------
+    //  Faction → sentry gun mapping
+    // -------------------------------------------------------------------------
 
-    uint32 ResolveSentryTypeForFaction(uint32 factionID)
+// -------------------------------------------------------------------------
+//  Faction → sentry gun mapping (no EVEDB/InvTypes.h needed)
+// -------------------------------------------------------------------------
+uint32 ResolveSentryTypeForFaction(uint32 factionID)
+{
+    // Ask StaticDataMgr for the faction name (e.g. "Caldari State")
+    std::string fname = sDataMgr.GetFactionName(factionID);
+
+    // Normalize a bit just in case (optional)
+    // (If you want you can lowercase this string, but not strictly required
+    //  if your faction names are the usual "Caldari", "Amarr", etc.)
+
+    if (fname.find("Caldari") != std::string::npos)
     {
-        switch (factionID)
-        {
-            case FACTION_CALDARI: {
-                // Caldari sentry guns I/II/III
-                static const uint32 caldariTypes[3] = { 3740, 3741, 3739 };
-                int idx = MakeRandomInt(0, 2);   // random 0..2
-                return caldariTypes[idx];
-            }
-            case FACTION_AMARR:
-                return 1194;
-            case FACTION_GALLENTE:
-                return 3742;
-            case FACTION_MINMATAR:
-                return 3743;
-            default:
-                // Fallback: generic sentry
-                return kDefaultSentryGunTypeID;
-        }
+        // Caldari sentry guns I/II/III (random)
+        static const uint32 caldariTypes[3] = { 3740, 3741, 3739 };
+        int idx = MakeRandomInt(0, 2);
+        return caldariTypes[idx];
     }
 
-    // ---- Helpers to actually spawn things -------------------------------------
+    if (fname.find("Amarr") != std::string::npos)
+    {
+        return 1194;        // Amarr sentry gun
+    }
 
-    // Plain static object (billboards, debris, civilians if we ever make them static).
+    if (fname.find("Gallente") != std::string::npos)
+    {
+        return 3742;        // Gallente sentry gun
+    }
+
+    if (fname.find("Minmatar") != std::string::npos)
+    {
+        return 3743;        // Minmatar sentry gun
+    }
+
+    // Unknown / non-empire faction -> generic fallback
+    return kDefaultSentryGunTypeID;
+}
+
+    // -------------------------------------------------------------------------
+    //  Helpers to actually spawn entities
+    // -------------------------------------------------------------------------
+
+    // Plain static object (billboards, debris, *static* civilians, etc.)
     void SpawnStaticPropAt(
         SystemManager& system,
         uint32 systemID,
@@ -263,8 +277,8 @@ namespace
         // FactionData is defined in the NPC system (used by NPC / Sentry).
         FactionData fData;
         fData.allianceID    = 0;
-        fData.factionID     = factionID;   // empire faction (Amarr/Caldari/etc.) from StaticDataMgr
-        fData.corporationID = ownerID;     // for now tie corp to owner (can refine later)
+        fData.factionID     = factionID;   // empire faction (Amarr/Caldari/etc.)
+        fData.corporationID = ownerID;     // tie corp to owner for now
         fData.ownerID       = ownerID;     // NPC/system owner
 
         Sentry* pSE = new Sentry(itemRef, system.GetServiceMgr(), &system, fData);
@@ -280,10 +294,15 @@ namespace
 
         sLog.Log("StaticPropSpawner",
                  "Spawned SENTRY itemID=%u typeID=%u (factionID=%u) at (%.0f, %.0f, %.0f) in system %u.",
-                 itemRef->itemID(), typeID, factionID, position.x, position.y, position.z, systemID);
+                 itemRef->itemID(), typeID, factionID,
+                 position.x, position.y, position.z, systemID);
     }
 
-    // Gates: use SystemManager::GetGates()
+    // -------------------------------------------------------------------------
+    //  Gate environments
+    // -------------------------------------------------------------------------
+
+    // Use SystemManager::GetGates() to place billboards & sentries.
     void SpawnGateEnvironmentForSystem(SystemManager& system,
                                        uint32 systemID,
                                        uint32 factionID)
@@ -302,8 +321,8 @@ namespace
         for (std::map<uint32, SystemEntity*>::const_iterator it = gates.begin();
              it != gates.end(); ++it)
         {
-            uint32 gateItemID   = it->first;
-            SystemEntity* gate  = it->second;
+            uint32        gateItemID = it->first;
+            SystemEntity* gate       = it->second;
             if (gate == nullptr)
                 continue;
 
@@ -337,7 +356,11 @@ namespace
         }
     }
 
-    // Stations: scan all entities and pick those that are StationSE
+    // -------------------------------------------------------------------------
+    //  Station environments
+    // -------------------------------------------------------------------------
+
+    // Scan all entities and pick those that are StationSE.
     void SpawnStationEnvironmentForSystem(SystemManager& system,
                                           uint32 systemID,
                                           uint32 factionID)
@@ -393,9 +416,61 @@ namespace
         }
     }
 
-} // anonymous namespace
+    // -------------------------------------------------------------------------
+    //  Subspace Beacons near gates
+    // -------------------------------------------------------------------------
 
-// ---- Public entry point --------------------------------------------------------
+void SpawnGateBeaconsForSystem(SystemManager& system)
+{
+    const uint32 systemID   = system.GetID();
+    const char*  systemName = system.GetName();
+
+    std::map<uint32, SystemEntity*> gates = system.GetGates();
+    if (gates.empty())
+    {
+        sLog.Log("StaticPropSpawner",
+                 "SpawnGateBeaconsForSystem(): system %u (%s) has no gates; skipping beacons.",
+                 systemID, systemName);
+        return;
+    }
+
+    sLog.Log("StaticPropSpawner",
+             "SpawnGateBeaconsForSystem(): system %u (%s) has %zu gates; spawning Subspace Beacons.",
+             systemID, systemName, gates.size());
+
+    for (std::map<uint32, SystemEntity*>::const_iterator it = gates.begin();
+         it != gates.end(); ++it)
+    {
+        SystemEntity* gateSE = it->second;
+        if (!gateSE)
+            continue;
+
+        GPoint gatePos = gateSE->GetPosition();
+
+        // Place beacon ~15km "in front" of gate (same idea as billboards)
+        GPoint beaconPos(
+            gatePos.x + 15000.0,
+            gatePos.y,
+            gatePos.z);
+
+        // Use the same static-prop path as billboards/sentries
+        SpawnStaticPropAt(system, systemID, kSubspaceBeaconTypeID, kPropOwnerID, beaconPos);
+
+        sLog.Log("StaticPropSpawner",
+                 "SpawnGateBeaconsForSystem(): requested Subspace Beacon type %u at (%.0f, %.0f, %.0f) "
+                 "near gate %u in system %u (%s).",
+                 kSubspaceBeaconTypeID,
+                 beaconPos.x, beaconPos.y, beaconPos.z,
+                 gateSE->GetID(),
+                 systemID,
+                 systemName);
+    }
+  } 
+}
+
+// -----------------------------------------------------------------------------
+//  Public entry point
+// -----------------------------------------------------------------------------
 
 bool StaticPropSpawner::SpawnForSystem(SystemManager& system)
 {
@@ -407,7 +482,8 @@ bool StaticPropSpawner::SpawnForSystem(SystemManager& system)
     uint32 factionID = sDataMgr.GetRegionFaction(regionID);
 
     sLog.Log("StaticPropSpawner",
-             "SpawnForSystem() [GATE+STATION TEMPLATE v4 — PURE C++, FACTION SENTRY NPC] called for system %u (%s), region %u (factionID=%u).",
+             "SpawnForSystem() [GATE+STATION TEMPLATE v4 — PURE C++, FACTION SENTRY NPC + BEACONS] "
+             "called for system %u (%s), region %u (factionID=%u).",
              systemID, systemName, regionID, factionID);
 
     // Gates
@@ -415,6 +491,9 @@ bool StaticPropSpawner::SpawnForSystem(SystemManager& system)
 
     // Stations
     SpawnStationEnvironmentForSystem(system, systemID, factionID);
+
+    // Subspace beacons near gates
+    SpawnGateBeaconsForSystem(system);
 
     sLog.Log("StaticPropSpawner",
              "SpawnForSystem(): finished C++ template spawns for system %u (%s).",

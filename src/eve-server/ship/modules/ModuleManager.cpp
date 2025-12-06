@@ -675,11 +675,10 @@ void ModuleManager::DeactivateAll()
     }
 }
 
-
 void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int32 repeat)
 {
     if (!pShipItem->HasPilot()) {
-        _log(MODULE__ERROR, "MM::Activate() - Called from a ship with no pilot." );
+        _log(MODULE__ERROR, "MM::Activate() - Called from a ship with no pilot.");
         return;
     }
 
@@ -691,17 +690,33 @@ void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int3
 
     GenericModule* pMod = GetModule(itemID);
     if (pMod == nullptr) {
-        _log(MODULE__ERROR, "MM::Activate() - Called on module %u that is not loaded.", itemID );
+        _log(MODULE__ERROR, "MM::Activate() - Called on module %u that is not loaded.", itemID);
         return;
     }
 
-    _log(MODULE__TRACE, "MM::Activate() - %s (%u - %s)  targetID: %i, repeat: %i.", \
-                pMod->GetSelf()->name(), effectID, sFxDataMgr.GetEffectName(effectID).c_str(), targetID, repeat);
+    _log(MODULE__TRACE,
+        "MM::Activate() - %s (%u - %s)  targetID: %i, repeat: %i.",
+        pMod->GetSelf()->name(),
+        effectID,
+        sFxDataMgr.GetEffectName(effectID).c_str(),
+        targetID,
+        repeat);
 
-    if (effectID == 16) { //16    online
+    // 16 = "online" effect
+    if (effectID == 16) { // 16    online
+        // Server-side module reactivation delay (e.g. cloaks, MJDs, certain EWAR).
+        // This maps to the 'ModuleReactivationDelayed2' client message used on Crucible/TQ.
+        if (pMod->IsReactivationDelayed()) {
+            // NOTE: Using UserError instead of MakeUserError because MakeUserError
+            // is not available in this TU. We can wire up formatted args later
+            // once that helper is confirmed/implemented.
+            throw UserError("ModuleReactivationDelayed2");
+        }
+
         pMod->Online();
         return;
     }
+
     /*{'FullPath': u'UI/Messages', 'messageID': 259628, 'label': u'InvalidTargetCanAlreadyTractoredBody'}(u'The {[item]module.name} cannot engage a tractor beam on that object as it is already being tractor beamed by something else.', None, {u'{[item]module.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'module'}})
      * {'FullPath': u'UI/Messages', 'messageID': 259629, 'label': u'InvalidTargetCanOwnerBody'}(u'The {[item]module.name} cannot engage a tractor beam on that object as it is not owned by you, a fellow fleet member or another member of a player corporation you belong to.', None, {u'{[item]module.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'module'}})
      * {'FullPath': u'UI/Messages', 'messageID': 259630, 'label': u'InvalidTargetGroupBody'}(u'Invalid target, can only activate this on {groupName}.', None, {u'{groupName}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'groupName'}})
@@ -710,15 +725,13 @@ void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int3
     if (effectID == 2255) { // tractorBeamCan
         SystemEntity* pSE = pShipItem->GetPilot()->SystemMgr()->GetSE(targetID);
         if (pSE == nullptr)
-            throw UserError ("DeniedActivateTargetNotPresent");
+            throw UserError("DeniedActivateTargetNotPresent");
         if (pSE->DestinyMgr()->IsTractored()) {
-            // report player tractoring item?
-            pShipItem->GetPilot()->SendNotifyMsg("Your %s cannot engage the %s, which is already being tractor beamed by something else.", pMod->GetSelf()->name(), pSE->GetName());
-            return;
-        //std::map<std::string, PyRep *> args;
-        //args["module"]  = new PyInt(itemID);
-        //throw PyException(MakeUserError("InvalidTargetCanAlreadyTractored", args));
-        }
+        // CCP message: InvalidTargetCanAlreadyTractoredBody
+        // Uses {[item]module.name} -> "module" in the format args
+        throw UserError("InvalidTargetCanAlreadyTractored")
+            .AddFormatValue("module", new PyInt(itemID));
+     }
     }
 
     if (!pMod->isOnline()) {
@@ -727,16 +740,17 @@ void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int3
         return;
     } else if (pDestiny->IsWarping()) {
         if (pMod->HasAttribute(AttrDisallowActivateOnWarp) or !sFxDataMgr.isWarpSafe(effectID))
-            throw UserError ("DeniedActivateInWarp");
+            throw UserError("DeniedActivateInWarp");
     } else if (pDestiny->IsCloaked()) {
-        throw UserError ("DeniedActivateCloaked");
+        throw UserError("DeniedActivateCloaked");
     } else if (pShipItem->GetPilot()->IsJump()) {
-        throw UserError ("DeniedActivateInJump");
+        throw UserError("DeniedActivateInJump");
     }
 
     if (!pMod->IsLinked() or pMod->IsMaster())
         pMod->Activate(effectID, targetID, repeat);
 }
+
 
 void ModuleManager::Deactivate(uint32 itemID, std::string effectName)
 {
