@@ -45,7 +45,8 @@
  * Base Structure Item for all POS types
  */
 StructureItem::StructureItem(uint32 _structureID, const ItemType &_itemType, const ItemData &_data)
-    : InventoryItem(_structureID, _itemType, _data)
+    : InventoryItem(_structureID, _itemType, _data),
+      mySE(nullptr)
 {
     pInventory = new Inventory(InventoryItemRef(this));
     _log(ITEM__TRACE, "Created StructureItem for %s (%u).", name(), itemID());
@@ -164,10 +165,14 @@ void StructureItem::AddItem(InventoryItemRef iRef)
 
     // test for item types and verify flags here...
 
+    // This routes the item into this structure's inventory (pInventory via GetMyInventory()).
     InventoryItem::AddItem(iRef);
 
-    if (mySE->IsCOSE())
+    // mySE may not be set yet for freshly-spawned containers (e.g. salvage jetcan),
+    // so guard before querying customs-office specific logic.
+    if (mySE != nullptr && mySE->IsCOSE()) {
         mySE->GetCOSE()->VerifyAddItem(iRef);
+    }
 }
 
 void StructureItem::RemoveItem(InventoryItemRef iRef)

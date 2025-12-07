@@ -37,6 +37,7 @@ public:
 
 protected:
     void SendFailure();
+    void SendSuccess(bool hollow);
     void CheckSuccess();
     void DropSalvage();
     void DropItems();
@@ -47,7 +48,7 @@ protected:
     bool m_dataMiner :1;
 
     int8 m_accessChance;    // target chance (base chance)
-
+    
 private:
     Character* pChar;
 

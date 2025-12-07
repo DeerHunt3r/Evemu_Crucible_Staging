@@ -1303,7 +1303,7 @@ void ActiveModule::ShowEffect(bool active/*false*/, bool abort/*false*/)
         shipEff.duration = (abort ? 2000 : timeLeft);  // duration in seconds
         shipEff.repeat = m_repeat;
         // will need to check and update for data miners here  (any other cases?)
-        if ((groupID() == EVEDB::invGroups::Salvager) and IsSuccess()) {
+        if ((groupID() == EVEDB::invGroups::Salvager) and IsSuccess() and (m_targetSE != nullptr)) {
             // Create Destiny Updates:
             PyTuple* type = new PyTuple(2);
                 type->SetItem(0, new PyInt(4));
