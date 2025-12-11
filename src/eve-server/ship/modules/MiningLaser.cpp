@@ -1,5 +1,4 @@
-
- /**
+/**
   * @name MiningLaser.cpp
   *   mining module class
   * @Author:         Allan
@@ -7,12 +6,10 @@
   * @revised:  4 August 2017
   */
 
-
 #include "eve-server.h"
 
-
 #include "StaticDataMgr.h"
-#include "StatisticMgr.h"
+//#include "StatisticMgr.h"
 #include "character/Character.h"
 #include "inventory/Inventory.h"
 #include "ship/Ship.h"
@@ -20,7 +17,6 @@
 //#include "system/SystemBubble.h"
 //#include "system/SystemManager.h"
 #include "system/cosmicMgrs/BeltMgr.h"
-
 
 MiningLaser::MiningLaser(ModuleItemRef mRef, ShipItemRef sRef)
 : ActiveModule(mRef, sRef)
@@ -142,7 +138,7 @@ uint32 MiningLaser::DoCycle() {
      * we accomplish this by doing nothing on first cycle, and call the processing component at beginning of each cycle after that.
      */
     if (m_IsInitialCycle) {
-    	m_IsInitialCycle = false;
+        m_IsInitialCycle = false;
     } else {
         ProcessCycle();
     }
@@ -169,6 +165,28 @@ void MiningLaser::DeactivateCycle(bool abort/*false*/)
 /** @todo verify for ice and gas */
 void MiningLaser::ProcessCycle(bool abort/*false*/)
 {
+    // Harden against null target (previous segfault source)
+    if (m_targetSE == nullptr) {
+        _log(MINING__ERROR,
+             "%s(%u) ProcessCycle(%s) - m_targetSE is null. Aborting cycle.",
+             m_modRef->name(), m_modRef->itemID(), abort ? "true" : "false");
+
+        if (m_shipRef->HasPilot()) {
+            m_shipRef->GetPilot()->SendNotifyMsg(
+                "Your %s deactivates because its target no longer exists. Ref: ServerError 06429.",
+                m_modRef->name());
+        }
+
+        // Cleanly stop this module without risking recursion through our override.
+        ActiveModule::DeactivateCycle(true);
+        return;
+    }
+
+    _log(MINING__TRACE,
+         "%s(%u) ProcessCycle(%s) - targetID %u, holdFlag %u",
+         m_modRef->name(), m_modRef->itemID(), (abort ? "true" : "false"),
+         m_targetSE->GetID(), m_holdFlag);
+
     float cycleVol(GetMiningVolume());
 
     InventoryItemRef roidRef(m_targetSE->GetSelf());
@@ -176,13 +194,16 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
     float oreVolume(roidRef->GetAttribute(AttrVolume).get_float());
 
     if ((cycleVol < oreVolume) or (cycleVol <= 0) or (oreVolume <= 0)) {
-        _log(MINING__ERROR, "%s(%u) - Mining Laser could not extract ore from %s(%u)", m_modRef->name(), m_modRef->itemID(), roidRef->name(), m_targetSE->GetID() );
-        m_shipRef->GetPilot()->SendNotifyMsg("Your %s deactivates because there was an error in it's processing.  Ref: ServerError 06428.", m_modRef->name());
+        _log(MINING__ERROR, "%s(%u) - Mining Laser could not extract ore from %s(%u)",
+             m_modRef->name(), m_modRef->itemID(), roidRef->name(), m_targetSE->GetID() );
+        m_shipRef->GetPilot()->SendNotifyMsg(
+            "Your %s deactivates because there was an error in it's processing.  Ref: ServerError 06428.",
+            m_modRef->name());
         ActiveModule::DeactivateCycle(true);
         return;
     }
 
-    float oreAmount((cycleVol /oreVolume));
+    float oreAmount((cycleVol / oreVolume));
     if (abort) {
         // adjust amount AND cycle for partial cycle
         float delta = 1 - (GetRemainingCycleTimeMS() / GetAttribute(AttrDuration).get_float());
@@ -190,7 +211,8 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
         oreAmount *= delta;
         if (m_iMiner or m_gMiner)
             oreAmount = floor(oreAmount);
-        _log(MINING__DEBUG, "ProcessCycle(abort) -  cycleVol:%.2f, oreAmount:%.2f, delta:%.5f", cycleVol, oreAmount, delta);
+        _log(MINING__DEBUG, "ProcessCycle(abort) -  cycleVol:%.2f, oreAmount:%.2f, delta:%.5f",
+             cycleVol, oreAmount, delta);
     }
 
     float roidQuantity(roidRef->GetAttribute(AttrQuantity).get_float());
@@ -201,7 +223,7 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
     if (remainingCargoVolume < cycleVol) {
         // cargohold is full.  this module will fill to available volume and trash the rest
         if (remainingCargoVolume > oreVolume) {
-            oreAmount = remainingCargoVolume /oreVolume;
+            oreAmount = remainingCargoVolume / oreVolume;
         } else {
             oreAmount = 0;
         }
@@ -210,14 +232,18 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
         // this is a feature.
         m_shipRef->CargoFull();
 
-        // explicitly calling base class method here will negate the possibility of running a loop from DeactivateCycle override and overfilling cargo (elusive error)
+        // explicitly calling base class method here will negate the possibility of running a loop
+        // from DeactivateCycle override and overfilling cargo (elusive error)
         ActiveModule::DeactivateCycle(true);
         if (!abort) // dont notify client if they deactivated laser
-            m_shipRef->GetPilot()->SendNotifyMsg("Your %s deactivates because your cargohold is full.", m_modRef->name());
+            m_shipRef->GetPilot()->SendNotifyMsg(
+                "Your %s deactivates because your cargohold is full.", m_modRef->name());
     }
 
-    _log(MINING__DEBUG, "ProcessCycle(%s) -  cycleVol:%.2f, roidQuantity:%.2f, remainingCargoVolume:%.2f/%.2f, oreAmount:%.2f", \
-                (abort?"true":"false"), cycleVol, roidQuantity, remainingCargoVolume, (remainingCargoVolume -cycleVol), oreAmount);
+    _log(MINING__DEBUG,
+         "ProcessCycle(%s) -  cycleVol:%.2f, roidQuantity:%.2f, remainingCargoVolume:%.2f/%.2f, oreAmount:%.2f",
+         (abort ? "true" : "false"), cycleVol, roidQuantity,
+         remainingCargoVolume, (remainingCargoVolume - cycleVol), oreAmount);
 
     if (oreAmount <= 0)
         return;
@@ -250,7 +276,8 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
     ItemData idata(roidRef->typeID(), m_shipRef->ownerID(), locTemp, flagNone, oreAmount);
     InventoryItemRef oRef(sItemFactory.SpawnItem(idata));
     if (oRef.get() == nullptr) {
-        _log(MINING__ERROR, "Could not create mined ore for %s(%u)", m_shipRef->name(), m_shipRef->itemID() );
+        _log(MINING__ERROR, "Could not create mined ore for %s(%u)",
+             m_shipRef->name(), m_shipRef->itemID() );
         return;
     }
 
@@ -258,8 +285,7 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
     if (m_shipRef->GetMyInventory()->HasAvailableSpace(m_holdFlag, oRef)) {
         oreError = false;
         oRef->MergeTypesInCargo(m_shipRef.get(), m_holdFlag);
-    }
-    else {
+    } else {
         float unitVolume = oRef->GetAttribute(AttrVolume).get_float();
         float shipVolume = m_shipRef->GetMyInventory()->GetRemainingCapacity(m_holdFlag);
         float newQuantity = shipVolume / unitVolume;
@@ -273,9 +299,11 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
     sStatMgr.Add(Stat::oreMined, cycleVol);
 
     if (oreError and !abort) {
-        m_shipRef->GetPilot()->SendNotifyMsg("Your %s deactivates as it couldn't add the %s to your %s.", \
-                m_modRef->name(), oRef->name(), sDataMgr.GetFlagName(m_holdFlag));
-        _log(MINING__ERROR, "Could not add ore to hold for %s(%u)", m_shipRef->name(), m_shipRef->itemID() );
+        m_shipRef->GetPilot()->SendNotifyMsg(
+            "Your %s deactivates as it couldn't add the %s to your %s.",
+            m_modRef->name(), oRef->name(), sDataMgr.GetFlagName(m_holdFlag));
+        _log(MINING__ERROR, "Could not add ore to hold for %s(%u)",
+             m_shipRef->name(), m_shipRef->itemID() );
         ActiveModule::DeactivateCycle(true);
         return;
     }
@@ -286,8 +314,9 @@ void MiningLaser::ProcessCycle(bool abort/*false*/)
     if (MakeRandomFloat(0,1) < m_crystalDmgChance) {
         m_crystalDmg += m_crystalDmgAmount;
         if (m_crystalDmg > 0.99f) {
-            m_shipRef->GetPilot()->SendNotifyMsg("Your %s deactivates due to the destruction of it's %s.", \
-                    m_modRef->name(), m_chargeRef->name());
+            m_shipRef->GetPilot()->SendNotifyMsg(
+                "Your %s deactivates due to the destruction of it's %s.",
+                m_modRef->name(), m_chargeRef->name());
             InventoryItemRef chargeRef(m_chargeRef);   // make a copy of charge's item ref, as m_chargeRef = NULL after next call returns
             m_shipRef->RemoveItem(m_chargeRef);
             chargeRef->Delete();
@@ -313,12 +342,15 @@ void MiningLaser::Depleted(std::multimap<float, MiningLaser*> &mMap) {
     InventoryItemRef roidRef(m_targetSE->GetSelf());
     float oreVolume(roidRef->GetAttribute(AttrVolume).get_float());
     if (oreVolume <= 0) {
-        _log(MINING__ERROR, "%s(%u) - Depleted() -  oreVolume is <0 for %s(%u)", m_modRef->name(), m_modRef->itemID(), roidRef->name(), m_targetSE->GetID() );
+        _log(MINING__ERROR,
+             "%s(%u) - Depleted() -  oreVolume is <0 for %s(%u)",
+             m_modRef->name(), m_modRef->itemID(), roidRef->name(), m_targetSE->GetID() );
 
         // send error and deactivate all active modules here
         for (auto cur : mMap) {
-            cur.second->GetShipRef()->GetPilot()->SendNotifyMsg("Your %s deactivates because there was a processing error.  Ref: ServerError 03123.", \
-                        cur.second->GetSelf()->name());
+            cur.second->GetShipRef()->GetPilot()->SendNotifyMsg(
+                "Your %s deactivates because there was a processing error.  Ref: ServerError 03123.",
+                cur.second->GetSelf()->name());
             cur.second->CancelOnError();
         }
         return;
@@ -329,10 +361,13 @@ void MiningLaser::Depleted(std::multimap<float, MiningLaser*> &mMap) {
 
     for (auto cur : mMap) {
         if ((cur.first < oreVolume) or (cur.first < 0.1)) {
-            _log(MINING__ERROR, "%s(%u) - Depleted() -  Mining Laser could not extract ore from %s(%u)", \
-                        cur.second->GetSelf()->name(), cur.second->GetSelf()->itemID(), roidRef->name(), m_targetSE->GetID() );
-            cur.second->GetShipRef()->GetPilot()->SendNotifyMsg("Your %s deactivates because there was an error in it's processing.  Ref: ServerError 06428.",\
-                        cur.second->GetSelf()->name());
+            _log(MINING__ERROR,
+                 "%s(%u) - Depleted() -  Mining Laser could not extract ore from %s(%u)",
+                 cur.second->GetSelf()->name(), cur.second->GetSelf()->itemID(),
+                 roidRef->name(), m_targetSE->GetID() );
+            cur.second->GetShipRef()->GetPilot()->SendNotifyMsg(
+                "Your %s deactivates because there was an error in it's processing.  Ref: ServerError 06428.",
+                cur.second->GetSelf()->name());
             cur.second->CancelOnError();
             continue;
         }
@@ -363,15 +398,20 @@ void MiningLaser::AddOreAndDeactivate(uint16 typeID, float amt, bool slave/*true
     ItemData idata(typeID, m_shipRef->ownerID(), locTemp, flagNone, amt);
     InventoryItemRef oRef(sItemFactory.SpawnItem( idata ));
     if (oRef.get() == nullptr) {
-        _log(MINING__ERROR, "AddOreAndDeactivate() - Could not create mined ore for %s(%u)", m_shipRef->name(), m_shipRef->itemID() );
+        _log(MINING__ERROR,
+             "AddOreAndDeactivate() - Could not create mined ore for %s(%u)",
+             m_shipRef->name(), m_shipRef->itemID() );
         return;
     }
 
     if (!m_shipRef->AddItemByFlag(m_holdFlag, oRef))
-        _log(MINING__ERROR, "AddOreAndDeactivate() - Could not add ore to hold for %s(%u)", m_shipRef->name(), m_shipRef->itemID() );
+        _log(MINING__ERROR,
+             "AddOreAndDeactivate() - Could not add ore to hold for %s(%u)",
+             m_shipRef->name(), m_shipRef->itemID() );
 
     // send pilot msg about depletion for this module
-    m_shipRef->GetPilot()->SendNotifyMsg("Your %s deactivates; Its target has been depleted.", m_modRef->name());
+    m_shipRef->GetPilot()->SendNotifyMsg(
+        "Your %s deactivates; Its target has been depleted.", m_modRef->name());
 
     if (slave)
         ActiveModule::DeactivateCycle(true);
@@ -389,15 +429,16 @@ float MiningLaser::GetMiningVolume()
 
     // fleet involvement enhances mining amount using MiningForeman of highest member (3%/lvl)
     // this should apply to modules/ship when boost activated, but this is easier at this time.
-    //  downside is client will have the original, lower cycle amount as this isnt set in module (but should be)
-    ShipSE* pShip(m_shipRef->GetPilot()->GetShipSE());
-    if (pShip != nullptr)
-        if (pShip->IsBoosted())
-            cycleVol *= (1 + (0.03f * pShip->GetMiningBoostAmount())); // 3% increase/level
+    // downside is client will have the original, lower cycle amount as this isnt set in module (but should be)
+    if (m_shipRef->HasPilot()) {
+        ShipSE* pShip(m_shipRef->GetPilot()->GetShipSE());
+        if (pShip != nullptr)
+            if (pShip->IsBoosted())
+                cycleVol *= (1 + (0.03f * pShip->GetMiningBoostAmount())); // 3% increase/level
+    }
 
     return cycleVol;
 }
-
 
 /*
  * {'messageKey': 'MiningCrystalDestroyed', 'dataID': 17883202, 'suppressable': False, 'bodyID': 259420, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1167}

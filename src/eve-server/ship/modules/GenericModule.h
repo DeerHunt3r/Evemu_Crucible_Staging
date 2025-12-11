@@ -84,11 +84,25 @@ public:
     bool                IsOverloaded()                  { return m_overLoaded; }
     bool                IsLinked()                      { return m_linked; }
     bool                IsMaster()                      { return m_linkMaster; }
-    bool                IsDamaged()                     { return m_modRef->GetAttribute(AttrDamage) != EvilZero; }
+   
+    bool                IsDamaged()                     
+    { 
+        return m_modRef->GetAttribute(AttrDamage) != EvilZero; 
+    }
 
-    // Current activity state helpers
-    bool                IsActive();         // defined in GenericModule.cpp
-    bool                IsLoading()         { return m_ModuleState == Module::State::Loading; }
+    // “Active” means: module is fully running, or is in the process of spooling down.
+    // This matches our actual enum (Activated / Deactivating) and how the client
+    // still treats the module as “on” during the deactivate cycle.
+    bool                IsActive()                      
+    { 
+        return (m_ModuleState == Module::State::Activated ||
+                m_ModuleState == Module::State::Deactivating);
+    }
+
+    bool                IsLoading()                     
+    { 
+        return m_ModuleState == Module::State::Loading; 
+    }
 
    
     /* generic access functions handled here, but set elsewhere. */

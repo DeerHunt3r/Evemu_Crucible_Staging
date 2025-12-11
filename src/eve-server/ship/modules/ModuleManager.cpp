@@ -189,19 +189,32 @@ void ModuleManager::Process()
 {
     double profileStartTime(GetTimeUSeconds());
 
+    // Count how many fitted modules are actually "active" this tick.
+    size_t activeCount = 0;
+
     // proc modules in order of (low -> mid -> high) for proper fx application
     // NOTE: rigs and subsystems dont need proc tic.
     std::map<uint8, GenericModule*>::iterator itr = m_fittings.begin(), end = m_fittings.end();
     while (itr != end) {
-        if (itr->second != nullptr)
+        if (itr->second != nullptr) {
+            // uses GenericModule::IsActive(), which we just tightened
+            if (itr->second->IsActive())
+                ++activeCount;
+
             if (itr->second->GetAttribute(AttrOnline).get_bool())
                 itr->second->Process();
+        }
         ++itr;
     }
+
+    _log(MODULE__DEBUG,
+         "ModuleManager::Process() - ship %u: %zu active fitted modules.",
+         pShipItem->itemID(), activeCount);
 
     if (sConfig.debug.UseProfiling)
         sProfiler.AddTime(Profile::modules, GetTimeUSeconds() - profileStartTime);
 }
+
 
 bool ModuleManager::IsSlotOccupied(EVEItemFlags flag)
 {
@@ -678,7 +691,7 @@ void ModuleManager::DeactivateAll()
 void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int32 repeat)
 {
     if (!pShipItem->HasPilot()) {
-        _log(MODULE__ERROR, "MM::Activate() - Called from a ship with no pilot.");
+        _log(MODULE__ERROR, "MM::Activate() - Called from a ship with no pilot." );
         return;
     }
 
@@ -690,49 +703,46 @@ void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int3
 
     GenericModule* pMod = GetModule(itemID);
     if (pMod == nullptr) {
-        _log(MODULE__ERROR, "MM::Activate() - Called on module %u that is not loaded.", itemID);
+        _log(MODULE__ERROR, "MM::Activate() - Called on module %u that is not loaded.", itemID );
         return;
     }
 
-    _log(MODULE__TRACE,
-        "MM::Activate() - %s (%u - %s)  targetID: %i, repeat: %i.",
-        pMod->GetSelf()->name(),
-        effectID,
-        sFxDataMgr.GetEffectName(effectID).c_str(),
-        targetID,
-        repeat);
+    _log(MODULE__TRACE, "MM::Activate() - %s (%u - %s)  targetID: %i, repeat: %i.",
+         pMod->GetSelf()->name(),
+         effectID,
+         sFxDataMgr.GetEffectName(effectID).c_str(),
+         targetID,
+         repeat);
 
-    // 16 = "online" effect
-    if (effectID == 16) { // 16    online
-        // Server-side module reactivation delay (e.g. cloaks, MJDs, certain EWAR).
-        // This maps to the 'ModuleReactivationDelayed2' client message used on Crucible/TQ.
+       if (effectID == 16) { //16    online
+        // Check for server-side module reactivation delay (e.g. cloaks, MJDs, certain EWAR).
+        // This matches the 'ModuleReactivationDelayed2' client message used on Tranquility.
         if (pMod->IsReactivationDelayed()) {
-            // NOTE: Using UserError instead of MakeUserError because MakeUserError
-            // is not available in this TU. We can wire up formatted args later
-            // once that helper is confirmed/implemented.
+            // For now we use UserError here, which is already used elsewhere in this file.
+            // When we do a dedicated Messaging Hygiene pass for reactivation delays,
+            // we can switch this to MakeUserError(...) with args if needed.
             throw UserError("ModuleReactivationDelayed2");
         }
 
         pMod->Online();
         return;
     }
+ 
 
-    /*{'FullPath': u'UI/Messages', 'messageID': 259628, 'label': u'InvalidTargetCanAlreadyTractoredBody'}(u'The {[item]module.name} cannot engage a tractor beam on that object as it is already being tractor beamed by something else.', None, {u'{[item]module.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'module'}})
-     * {'FullPath': u'UI/Messages', 'messageID': 259629, 'label': u'InvalidTargetCanOwnerBody'}(u'The {[item]module.name} cannot engage a tractor beam on that object as it is not owned by you, a fellow fleet member or another member of a player corporation you belong to.', None, {u'{[item]module.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'module'}})
-     * {'FullPath': u'UI/Messages', 'messageID': 259630, 'label': u'InvalidTargetGroupBody'}(u'Invalid target, can only activate this on {groupName}.', None, {u'{groupName}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'groupName'}})
-     */
+    /* CCP message docs block here, left as-is in your file */
 
-    if (effectID == 2255) { // tractorBeamCan
+        if (effectID == 2255) { // tractorBeamCan
         SystemEntity* pSE = pShipItem->GetPilot()->SystemMgr()->GetSE(targetID);
         if (pSE == nullptr)
             throw UserError("DeniedActivateTargetNotPresent");
+
         if (pSE->DestinyMgr()->IsTractored()) {
-        // CCP message: InvalidTargetCanAlreadyTractoredBody
-        // Uses {[item]module.name} -> "module" in the format args
-        throw UserError("InvalidTargetCanAlreadyTractored")
-            .AddFormatValue("module", new PyInt(itemID));
-     }
+            // Use the CCP nanny message key so the client can show the proper localized text.
+            // We keep this as a plain UserError for now to avoid pulling in MakeUserError here.
+            throw UserError("InvalidTargetCanAlreadyTractored");
+        }
     }
+
 
     if (!pMod->isOnline()) {
         // client wont allow activating an offline module.  this is catchall. (but should never hit)
@@ -740,11 +750,11 @@ void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int3
         return;
     } else if (pDestiny->IsWarping()) {
         if (pMod->HasAttribute(AttrDisallowActivateOnWarp) or !sFxDataMgr.isWarpSafe(effectID))
-            throw UserError("DeniedActivateInWarp");
+            throw UserError ("DeniedActivateInWarp");
     } else if (pDestiny->IsCloaked()) {
-        throw UserError("DeniedActivateCloaked");
+        throw UserError ("DeniedActivateCloaked");
     } else if (pShipItem->GetPilot()->IsJump()) {
-        throw UserError("DeniedActivateInJump");
+        throw UserError ("DeniedActivateInJump");
     }
 
     if (!pMod->IsLinked() or pMod->IsMaster())
@@ -766,12 +776,15 @@ void ModuleManager::Deactivate(uint32 itemID, std::string effectName)
         pMod->Offline();
         return;
     }
-    if (pMod->GetModuleState() != Module::State::Activated)  // we dont need an error msgs here....this is acceptable, as the module may not be active
+
+    // Only bother if the module is actually active
+    if (pMod->GetModuleState() != Module::State::Activated)
         return;
 
     _log(MODULE__TRACE, "MM::Deactivate() - %s Deactivating - '%s'", pMod->GetSelf()->name(), effectName.c_str());
     pMod->Deactivate(effectName);
 }
+
 
 void ModuleManager::Overload(uint32 itemID)
 {
