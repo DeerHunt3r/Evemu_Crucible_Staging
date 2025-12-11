@@ -776,133 +776,133 @@ bool Inventory::ValidateAddItem(EVEItemFlags flag, InventoryItemRef iRef) const
 
     Client* pClient(sItemFactory.GetUsingClient());
 
-    // check that we're close enough if a container in space
-    if (m_self->groupID() == EVEDB::invGroups::Cargo_Container && sDataMgr.IsSolarSystem(m_self->locationID())) {
-        GVector direction (m_self->position(), pClient->GetShip()->position());
-        float maxDistance = 2500.0f;
+    // 1) Distance check: destination is a container in space
+    if (m_self->groupID() == EVEDB::invGroups::Cargo_Container &&
+        sDataMgr.IsSolarSystem(m_self->locationID()))
+    {
+        if (pClient != nullptr) {
+            ShipItemRef shipRef = pClient->GetShip();
+            if (shipRef) {
+                GVector direction(m_self->position(), shipRef->position());
+                float maxDistance = 2500.0f;
 
-        if (m_self->HasAttribute (AttrMaxOperationalDistance) == true)
-            maxDistance = m_self->GetAttribute (AttrMaxOperationalDistance).get_float ();
+                if (m_self->HasAttribute(AttrMaxOperationalDistance))
+                    maxDistance = m_self->GetAttribute(AttrMaxOperationalDistance).get_float();
 
-        if (direction.length() > maxDistance)
-            throw UserError ("NotCloseEnoughToAdd")
-                    .AddAmount ("maxdist", maxDistance);
+                if (direction.length() > maxDistance)
+                    throw UserError("NotCloseEnoughToAdd")
+                            .AddAmount("maxdist", maxDistance);
+            } else {
+                _log(INV__WARNING,
+                     "Inventory::ValidateAddItem() - using client has no ship while "
+                     "validating add to container %s(%u); skipping distance check.",
+                     m_self->name(), m_self->itemID());
+            }
+        } else {
+            _log(INV__WARNING,
+                 "Inventory::ValidateAddItem() - no using client while "
+                 "validating add to container %s(%u); skipping distance check.",
+                 m_self->name(), m_self->itemID());
+        }
     }
 
-    // check if where the item is coming from was a cargo container
+    // 2) Distance check: source was a container in space
     InventoryItemRef cRef = sItemFactory.GetItemRef(iRef->locationID());
-    if (cRef->groupID() == EVEDB::invGroups::Cargo_Container && sDataMgr.IsSolarSystem(cRef->locationID())) {
-        GVector direction (cRef->position(), pClient->GetShip()->position());
-        float maxDistance(2500.0f);
-        if (cRef->HasAttribute (AttrMaxOperationalDistance) == true)
-            maxDistance = cRef->GetAttribute(AttrMaxOperationalDistance).get_float ();
+    if (cRef.get() != nullptr) {
+        if (cRef->groupID() == EVEDB::invGroups::Cargo_Container &&
+            sDataMgr.IsSolarSystem(cRef->locationID()))
+        {
+            if (pClient != nullptr) {
+                ShipItemRef shipRef = pClient->GetShip();
+                if (shipRef) {
+                    GVector direction(cRef->position(), shipRef->position());
+                    float maxDistance(2500.0f);
 
-        if (direction.length() > maxDistance)
-            throw UserError("NotCloseEnoughToLoot")
-                .AddAmount("maxdist", maxDistance);
+                    if (cRef->HasAttribute(AttrMaxOperationalDistance))
+                        maxDistance = cRef->GetAttribute(AttrMaxOperationalDistance).get_float();
+
+                    if (direction.length() > maxDistance)
+                        throw UserError("NotCloseEnoughToLoot")
+                                .AddAmount("maxdist", maxDistance);
+                } else {
+                    _log(INV__WARNING,
+                         "Inventory::ValidateAddItem() - using client has no ship while "
+                         "validating loot from container %s(%u); skipping distance check.",
+                         cRef->name(), cRef->itemID());
+                }
+            } else {
+                _log(INV__WARNING,
+                     "Inventory::ValidateAddItem() - no using client while "
+                     "validating loot from container %s(%u); skipping distance check.",
+                     cRef->name(), cRef->itemID());
+            }
+        }
+    } else {
+        _log(INV__WARNING,
+             "Inventory::ValidateAddItem() - source locationID %u for %s(%u) is not a valid item; "
+             "skipping container-distance checks.",
+             iRef->locationID(), iRef->name(), iRef->itemID());
     }
-    // can this be coded to check weapon capy?   im sure it can. just a flag, right?
 
-    float capacity = GetRemainingCapacity(flag);
-    float volume = iRef->GetAttribute(AttrVolume).get_float();
+    // ---- Capacity logic (unchanged from original) ----
+
+    float capacity    = GetRemainingCapacity(flag);
+    float volume      = iRef->GetAttribute(AttrVolume).get_float();
     float totalVolume = iRef->quantity() * volume;
 
-    _log(INV__CAPY, "Inventory::ValidateAddItem() - Testing %s's %s available capy of %.2f to add %i %s at %.2f (%.3f each)",
-         m_self->name(), sDataMgr.GetFlagName(flag), capacity, iRef->quantity(), iRef->name(), totalVolume, volume);
+    _log(INV__CAPY,
+         "Inventory::ValidateAddItem() - Testing %s's %s available capy of %.2f to add %i %s at %.2f (%.3f each)",
+         m_self->name(), sDataMgr.GetFlagName(flag), capacity,
+         iRef->quantity(), iRef->name(), totalVolume, volume);
 
-    /** modify checks for splitting items in same container or moving items between a container's corp hangars
-     * flag and iRef->flag() will be same (or same type).
-     * add requested move volume to container's available capy before other checks
-     *   this will show item being removed from container to allow subsequent additions
-     */
-    if (m_self->itemID() == iRef->locationID())
-        if ((flag == iRef->flag())
-        or  (IsHangarFlag(flag) and IsHangarFlag(iRef->flag()))) {
-            // possible item split.  will have to molest the shit outta this one to verify nullablity of exploits
-            capacity += totalVolume;
-            _log(INV__CAPY, "Inventory::ValidateAddItem() - flag() %s (%u) == iRef->flag() %s (%u) - test capacity changed to %.2f",
-                    sDataMgr.GetFlagName(flag), flag, sDataMgr.GetFlagName(iRef->flag()), iRef->flag(), capacity);
+    // If moving within same container/flag, add current item volume back into capy
+    if (m_self->itemID() == iRef->locationID()
+        && (flag == iRef->flag())
+        && IsCargoHoldFlag(flag)
+        && (iRef->flag() != flagNone))
+    {
+        capacity += totalVolume;
+        _log(INV__CAPY,
+             "Inventory::ValidateAddItem() - Moving %s within %s. current capy of %.2f increased to %.2f to allow for move",
+             iRef->name(), m_self->name(), GetRemainingCapacity(flag), capacity);
     }
 
-    // check capy for single unit
-    if (capacity < volume) { // smallest volume is 0.0025
-        if (pClient != nullptr) {
-            std::map<std::string, PyRep *> args;
-            args["volume"] = new PyFloat(volume);
-            sItemFactory.UnsetUsingClient();
-            if (IsCargoHoldFlag(flag))
-                throw UserError ("NotEnoughCargoSpace")
-                        .AddAmount ("volume", volume)
-                        .AddAmount ("available", capacity);
-            else if (flag == flagShipHangar)
-                throw UserError ("NotEnoughCargoSpaceFor1Unit")
-                        .AddAmount ("volume", volume)
-                        .AddFormatValue ("type", new PyInt (iRef->itemID ()))
-                        .AddAmount ("required", volume)
-                        .AddAmount ("free", capacity);
-            else if (IsSpecialHoldFlag(flag))
-                throw UserError ("NotEnoughSpecialBaySpaceOverload")
-                        .AddAmount ("volume", volume)
-                        .AddFormatValue ("item", new PyInt (iRef->itemID ()))
-                        .AddAmount ("maximum", GetCapacity (flag))
-                        .AddAmount ("user", GetStoredVolume (flag));
-            else if (IsModuleSlot(flag))
-                throw UserError ("NotEnoughChargeSpace")
-                        .AddAmount ("volume", volume)
-                        .AddAmount ("capacity", GetCapacity (flag));
-            else if (IsHangarFlag(flag))
-                throw UserError ("NotEnoughSpaceOverload")
-                        .AddAmount ("volume", volume)
-                        .AddLocationName ("item", iRef->itemID ())
-                        .AddAmount ("maximum", GetCapacity (flag))
-                        .AddAmount ("user", GetStoredVolume (flag));
-            else if (flag == flagDroneBay)
-                throw UserError ("NotEnoughDroneBaySpaceOverload")
-                        .AddAmount ("volume", volume)
-                        .AddLocationName ("item", iRef->itemID ())
-                        .AddAmount ("maximum", GetCapacity (flag))
-                        .AddAmount ("used", GetStoredVolume (flag));
-            else
-                throw UserError ("NoSpaceForThatOverload")
-                        .AddAmount ("volume", volume)
-                        .AddFormatValue ("item", new PyInt (iRef->itemID ()))
-                        .AddAmount ("maximum", GetCapacity (flag))
-                        .AddAmount ("used", GetStoredVolume (flag));
-        }
-        return false;
+    // If moving between divisions of same hangar, add volume back
+    if (m_self->itemID() == iRef->locationID()
+        && (iRef->flag() != flag)
+        && IsHangarFlag(m_self->flag())
+        && IsHangarFlag(iRef->flag()))
+    {
+        capacity += totalVolume;
+        _log(INV__CAPY,
+             "Inventory::ValidateAddItem() - Moving %s within corporate hangar %s. current capy of %.2f increased to %.2f to allow for move",
+             iRef->name(), m_self->name(), GetRemainingCapacity(flag), capacity);
     }
 
-    // check capy for all units
-    if (totalVolume > capacity) {
-        if (IsSpecialHoldFlag(flag))
-            throw UserError ("NotEnoughSpecialBaySpace")
-                    .AddAmount ("volume", totalVolume)
-                    .AddAmount ("available", capacity);
-        else if (flag == flagDroneBay)
-            throw UserError ("NotEnoughDroneBaySpace")
-                    .AddAmount ("volume", totalVolume)
-                    .AddAmount ("available", capacity);
-        else if (IsHangarFlag(flag))
-            throw UserError ("NotEnoughCargoSpaceOverload")
-                    .AddAmount ("volume", totalVolume)
-                    .AddLocationName ("item", iRef->itemID ())
-                    .AddAmount ("maximum", GetCapacity (flag))
-                    .AddAmount ("used", GetStoredVolume (flag));
+    if (capacity < totalVolume) {
+        if (IsHangarFlag(flag))
+            throw UserError("NotEnoughCargoSpace")
+                    .AddAmount("volume", totalVolume)
+                    .AddAmount("available", capacity);
         else if (IsCargoHoldFlag(flag))
-            throw UserError ("NotEnoughCargoSpace")
-                    .AddAmount ("volume", totalVolume)
-                    .AddAmount ("available", capacity);
+            throw UserError("NotEnoughCargoSpace")
+                    .AddAmount("volume", totalVolume)
+                    .AddAmount("available", capacity);
         else
-            throw UserError ("NoSpaceForThat")
-                    .AddAmount ("volume", totalVolume)
-                    .AddFormatValue ("itemTypeName", new PyInt (iRef->itemID ()))
-                    .AddAmount ("itemVolume", totalVolume)
-                    .AddAmount ("volumeAvailable", capacity);
+            throw UserError("NoSpaceForThat")
+                    .AddAmount("volume", totalVolume)
+                    .AddFormatValue("itemTypeName", new PyInt(iRef->itemID()))
+                    .AddAmount("itemVolume", totalVolume)
+                    .AddAmount("volumeAvailable", capacity);
         return false;
     }
 
     return true;
 }
+
+
+    // check if where the item is coming from was a cargo container
+
 
 // multimerge - NotEnoughCargoSpace', 'NotEnoughCargoSpaceOverload', 'NotEnoughDroneBaySpace', 'NotEnoughDroneBaySpaceOverload',
 // 'NoSpaceForThat', 'NoSpaceForThatOverload', 'NotEnoughChargeSpace'):

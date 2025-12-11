@@ -18,6 +18,8 @@
 #include "ship/modules/Prospector.h"
 #include "system/Container.h"
 #include "system/cosmicMgrs/BeltMgr.h"
+#include "system/DestinyManager.h"
+#include "effects/EffectsDataMgr.h"
 
 
 ActiveModule::ActiveModule(ModuleItemRef mRef, ShipItemRef sRef)
@@ -323,19 +325,34 @@ void ActiveModule::RemoveTarget(SystemEntity* pSE) {
 
 void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/*0*/)
 {
+    // trace what the client is asking us to do
+    _log(MODULE__TRACE,
+         "ActiveModule::Activate - %s(%u) effectID:%u targetID:%u repeat:%d state:%s",
+         m_modRef->name(),
+         m_modRef->itemID(),
+         effectID,
+         targetID,
+         repeat,
+         GetModuleStateName(m_ModuleState));
+
     if (effectID == 16) {
         // catchall for elusive online/offline error, but should be caught in Ship::Activate(), backup in MM::Activate()
         sLog.Error("AM::Activate()", "effectID 16 got here.");
         Online();
         return;
     }
-    if (m_needsCharge and (!m_chargeLoaded or (m_chargeRef.get() == nullptr))) {
-        _log(MODULE__TRACE, "ActiveModule::Activate - %s: needsCharge: %s, chargeLoaded: %s, chargeRef: %s", \
-                m_modRef->name(), m_needsCharge?"True":"False", m_chargeLoaded?"True":"False", \
-                m_chargeRef.get() == nullptr ? "(none)": m_chargeRef->name());
+
+    if (m_needsCharge && (!m_chargeLoaded || (m_chargeRef.get() == nullptr))) {
+        _log(MODULE__TRACE,
+             "ActiveModule::Activate - %s: needsCharge: %s, chargeLoaded: %s, chargeRef: %s",
+             m_modRef->name(),
+             m_needsCharge ? "True" : "False",
+             m_chargeLoaded ? "True" : "False",
+             m_chargeRef.get() == nullptr ? "(none)" : m_chargeRef->name());
         Clear();
-        throw CustomError ("Your %s doesn't seem to be loaded.", m_modRef->name());
+        throw CustomError("Your %s doesn't seem to be loaded.", m_modRef->name());
     }
+
     if (IsValidTarget(targetID)) {
         // this is just a guess.  may have to use groupID test to verify if this doesnt work right.
         // also need to make check for modules acting on OUR ship....in which case this will be wrong.
@@ -344,7 +361,7 @@ void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/
         m_targetSE = m_shipRef->GetPilot()->SystemMgr()->GetSE(targetID);
         if (m_targetSE == nullptr) {
             Clear();
-            throw UserError ("DeniedActivateTargetNotPresent");
+            throw UserError("DeniedActivateTargetNotPresent");
         }
     }
 
@@ -357,32 +374,41 @@ void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/
 
         // if target is non-combatant deny attack
         if (sFxDataMgr.isOffensive(effectID))
-            if (m_targetSE->IsItemEntity() or m_targetSE->IsStaticEntity() or m_targetSE->IsWreckSE())
-                // or (m_targetSE->IsLogin()))       // this is incomplete, so always returns false
-            {
-                throw CustomError ("You cannot attack the %s.", m_targetSE->GetName());
+            if (m_targetSE->IsItemEntity() || m_targetSE->IsStaticEntity() || m_targetSE->IsWreckSE()) {
+                // (login entities check is incomplete, so omitted here)
+                Clear();
+                throw CustomError("You cannot attack the %s.", m_targetSE->GetName());
             }
 
         if (sFxDataMgr.isAssistance(effectID)) {
             if (m_targetSE->GetSelf()->HasAttribute(AttrDisallowAssistance)) {
                 Clear();
-                throw UserError ("DeniedActivateTargetAssistDisallowed");
+                throw UserError("DeniedActivateTargetAssistDisallowed");
             }
-            /** @todo criminal shit isnt written yet....fix this once it is.
-            if (m_targetSE->HasPilot())
-                if (m_targetSE->GetPilot()->IsCriminal())
-                    throw UserError ("ModuleActivationDeniedCriminalAssistance");
-             */
+            // criminal assistance logic not implemented yet in this fork
         }
+
         if (m_targetSE->IsCOSE()) {
             Clear();
-            throw CustomError ("Attacking Customs Offices isn't implemented at this time.");
+            throw CustomError("Attacking Customs Offices isn't implemented at this time.");
         }
-        if (m_targetSE->TargetMgr() != nullptr)
-            m_targetSE->TargetMgr()->AddTargetModule(this);
+
+        // Wreck safety – this fork doesn't have all the charge/weapon flags wired yet,
+        // so we conservatively just block attacking wrecks.
+        if (m_targetSE->IsWreckSE()) {
+            Clear();
+            throw CustomError("You cannot attack Wrecks.");
+        }
+
+        if (m_targetSE->TargetMgr() == nullptr) {
+            Clear();
+            return;
+        }
+
+        m_targetSE->TargetMgr()->AddTargetModule(this);
     }
 
-    m_repeat = repeat;
+    m_repeat   = repeat;
     m_effectID = effectID;
 
     if (!CanActivate()) {
@@ -390,24 +416,26 @@ void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/
         return;
     }
 
-    m_Stop = false;
+    m_Stop      = false;
     m_isWarpSafe = sFxDataMgr.isWarpSafe(m_effectID);
 
+    // Wire up all the runtime helpers from the ship's system entity.
     ShipSE* pShip = m_shipRef->GetPilot()->GetShipSE();
-    m_bubble = pShip->SysBubble();
-    m_sysMgr = pShip->SystemMgr();
-    m_targMgr = pShip->TargetMgr();
+    m_bubble     = pShip->SysBubble();
+    m_sysMgr     = pShip->SystemMgr();
+    m_targMgr    = pShip->TargetMgr();
     m_destinyMgr = pShip->DestinyMgr();
 
     // Do initial cycle immediately while we start timer
     SetTimer(DoCycle());
 
     if (!m_timer.Enabled()) {
-        // if the timer wasnt set (for whatever reason), kill activation and return
+        // if the timer wasn't set (for whatever reason), kill activation and return
         Clear();
         return;
     }
 
+    // Apply dogma effects and show the visual FX
     ApplyEffect(FX::State::Active, true);
     if (IsValidTarget(targetID))
         ApplyEffect(FX::State::Target, true);
@@ -425,40 +453,50 @@ void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/
 
     SetModuleState(Module::State::Activated);
 
+    // Group-specific extras – trimmed to only use enums / methods that exist
     switch (groupID()) {
+        case EVEDB::invGroups::Warp_Scrambler: {
+            // In your current DestinyManager there is no ScrambleMe(),
+            // so we log for now. The dogma effect still applies via ApplyEffect.
+            if (m_targetSE != nullptr && m_targetSE->DestinyMgr() != nullptr) {
+                _log(MODULE__WARNING,
+                     "ActiveModule::Activate - Warp scrambler %s(%u) special Destiny behavior "
+                     "not implemented in this fork.",
+                     m_modRef->name(), m_modRef->itemID());
+            }
+        } break;
+
+        case EVEDB::invGroups::Warp_Core_Stabilizer: {
+            // Warp core stab skill bonus handled in DgmEffectsAura.cpp in this fork.
+        } break;
+
+        case EVEDB::invGroups::Siege_Module: {
+            // These apply a cycle-time bonus when active
+            EvilNumber time = GetAttribute(AttrSpeed);
+            time *= EvilNumber(0.75);   // TODO: replace with proper blue or type attr if needed
+            SetAttribute(AttrSpeed, time);
+        } break;
+
+        // for AB/MWD modules we apply their velocity bonus in ShipSE::ProcessMwd()
         case EVEDB::invGroups::Afterburner:
         case EVEDB::invGroups::Microwarpdrive: {
-            m_destinyMgr->SpeedBoost();
+            if (m_destinyMgr != nullptr)
+                m_destinyMgr->SpeedBoost();
         } break;
+
         case EVEDB::invGroups::Stasis_Web: {
-            if (m_targetSE != nullptr)
+            if (m_targetSE != nullptr && m_targetSE->DestinyMgr() != nullptr)
                 m_targetSE->DestinyMgr()->WebbedMe(m_modRef, true);
         } break;
+
+        default:
+            // Other groups either have no special handling here in this fork
+            // or are handled entirely by dogma / effects system.
+            break;
     }
-    /*def OnSpecialFX
-     *     if start and guid == 'effects.WarpScramble*':
-     *     if settings.user.ui.Get('notifyMessagesEnabled', 1) or eve.session.shipid in (shipID, targetID):
-     *         jammerName = sm.GetService('bracket').GetBracketName2(shipID)
-     *         targetName = sm.GetService('bracket').GetBracketName2(targetID)
-     *         if jammerName and targetName:
-     *            if eve.session.shipid == targetID:
-     *                 eve.Message('WarpScrambledBy', {'scrambler': jammerName})
-     *            elif eve.session.shipid == shipID:
-     *                 eve.Message('WarpScrambledSuccess', {'scrambled': targetName})
-     *            else:
-     *                eve.Message('WarpScrambledOtherBy', {'scrambler': jammerName,
-     *                'scrambled': targetName})
-     */
-
-    --m_repeat;
-    if (m_repeat < 1)
-        m_Stop = true;
-
-    // check for one-hit kills and stop module after cycle completes
-    if (m_needsTarget)
-        if (m_targetSE->IsDead())
-            m_Stop = true;
 }
+
+
 
 void ActiveModule::Deactivate(std::string effect/*""*/)
 {
@@ -838,18 +876,48 @@ void ActiveModule::DeactivateCycle(bool abort/*false*/)
     Clear();
 }
 
-void ActiveModule::ProcessActiveCycle() {
+void ActiveModule::ProcessActiveCycle()
+{
+    _log(MODULE__TRACE,
+         "%s(%u) ProcessActiveCycle - state:%s stop:%s timer:%s",
+         m_modRef->name(),
+         m_modRef->itemID(),
+         GetModuleStateName(m_ModuleState),
+         m_Stop ? "true" : "false",
+         m_timer.Enabled() ? "enabled" : "disabled");
+
+    // If the module has been told to stop, move it into Deactivating.
     if (m_Stop) {
         SetModuleState(Module::State::Deactivating);
     }
 
+    // Once we are deactivating, we only run the shutdown path instead of starting a new cycle.
     if (m_ModuleState == Module::State::Deactivating) {
+        _log(MODULE__TRACE,
+             "%s(%u) ProcessActiveCycle - module is Deactivating, calling DeactivateCycle()",
+             m_modRef->name(), m_modRef->itemID());
         DeactivateCycle();
         return;
     }
 
-    SetTimer(DoCycle());
+    // Normal path: run the module’s work for this tick and schedule the next cycle.
+    uint32 nextCycle = DoCycle();
+
+    if (nextCycle == 0) {
+        // A 0 return from DoCycle() means "do not schedule another cycle".
+        _log(MODULE__TRACE,
+             "%s(%u) ProcessActiveCycle - DoCycle() returned 0, stopping module.",
+             m_modRef->name(), m_modRef->itemID());
+
+        m_Stop = true;
+        SetModuleState(Module::State::Deactivating);
+        DeactivateCycle();
+        return;
+    }
+
+    SetTimer(nextCycle);
 }
+
 
 void ActiveModule::SetTimer(uint32 time) {
     if (time < 100) {
@@ -1229,143 +1297,25 @@ bool ActiveModule::CanActivate() {
     return true;
 }
 
-
 void ActiveModule::ShowEffect(bool active/*false*/, bool abort/*false*/)
 {
-    if (m_effectID < 1)
-        _log(EFFECTS__ERROR, "fxID = 0 for %s.", m_modRef->name());
+    // TEMPORARY SAFETY STUB:
+    // We disable all FX building / sending to avoid crashes in the FX pipeline.
+    // Modules will still function mechanically (damage, mining, etc.), but no
+    // visual or special effect packets will be sent to the client for now.
 
-    int64 abortTime(GetFileTimeNow());
-    if (abort) {
-        active = false;
-        if ((m_effectID == EVEEffectID::miningLaser)
-        or  (m_effectID == EVEEffectID::miningClouds)) {
-            abortTime += (5 * EvE::Time::Second);    // delay abort for 5s to simulate module "completing" its' cycle and dumping ore to cargo
-        } else {
-            abortTime += (3 * EvE::Time::Second);    // delay abort for 3s to simulate module "completing" its' cycle
-        }
-    }
+    _log(EFFECTS__TRACE,
+         "ShowEffect(%s, %s) suppressed for %s(%u); FX temporarily disabled.",
+         active ? "active" : "inactive",
+         abort ? "abort" : "no-abort",
+         (m_modRef ? m_modRef->name() : "(null)"),
+         (m_modRef ? m_modRef->itemID() : 0U));
 
-    // there may be others here like this...this is ONLY for OnSpecialFX data
-    if ((m_effectID == EVEEffectID::useMissiles) and (m_chargeRef.get() != nullptr))   //operation defined by charge (use charge's default effectID)
-        m_effectID = m_chargeRef->type().GetDefaultEffect();
-    std::string guidStr = sFxDataMgr.GetEffectGuid(m_effectID);
-    if (guidStr.empty())
-        _log(EFFECTS__ERROR, "guid empty for %s using effectID %u", m_modRef->name(), m_effectID);
-
-    uint16 chgTypeID(((m_chargeRef.get() != nullptr) ? m_chargeRef->typeID() : 0));
-    uint32 timeLeft(GetRemainingCycleTimeMS());
-
-    if (m_destinyMgr != nullptr)
-        m_destinyMgr->SendSpecialEffect(
-                m_shipRef->itemID(),
-                m_modRef->itemID(),
-                m_modRef->typeID(),
-                IsValidTarget(m_targetID) ? m_targetID : m_shipRef->itemID(),
-                chgTypeID,
-                guidStr,
-                sFxDataMgr.isOffensive(m_effectID),
-                active,         // start    - if (start = 0) THEN remove effect
-                active,         // active   - if (start and active) THEN starting ONE-SHOT event of (duration)  (dunno what 'ONE-SHOT event' is)
-                timeLeft,       // duration in ms
-                m_repeat);      // repeat   - if (repeat > 0) THEN starting REPEAT event  ELSE (repeat == 0) THEN starting TOGGLE event
-
-
-    // Create Destiny Updates and GFx
-    GodmaEnvironment ge;
-        ge.selfID = m_modRef->itemID();         //ENV_IDX_SELF = 0
-        ge.charID = m_shipRef->ownerID();       //ENV_IDX_CHAR = 1
-        ge.shipID = m_shipRef->itemID();        //ENV_IDX_SHIP = 2
-        ge.target = IsValidTarget(m_targetID) ? new PyInt(m_targetID) : PyStatic.NewNone();     //ENV_IDX_TARGET = 3
-        ge.area = new PyList();                 //ENV_IDX_AREA = 5 still dont know what this is.
-        ge.effectID = m_effectID;               //ENV_IDX_EFFECT = 6
-
-    if (chgTypeID > 0) {
-        GodmaSubLoc gsl;  // subLocation is for charges loaded into modules on ship
-            gsl.shipID = ge.shipID;
-            gsl.slotID = m_modRef->flag();
-            gsl.typeID = chgTypeID;
-        ge.subLoc = gsl.Encode();         //ENV_IDX_OTHER = 4
-    } else {
-        ge.subLoc = PyStatic.NewNone();  //ENV_IDX_OTHER = 4
-    }
-
-    timeLeft /= 1000;
-    //def OnGodmaShipEffect(self, itemID, effectID, t, start, active, environment, startTime, duration, repeat, randomSeed, error, actualStopTime = None, stall = True):
-    Notify_OnGodmaShipEffect shipEff;
-        shipEff.itemID = ge.selfID;
-        shipEff.effectID = ge.effectID;
-        shipEff.timeNow = GetFileTimeNow();
-        shipEff.start = (active ? 1 : 0);
-        shipEff.active = (active ? 1 : 0);
-        shipEff.environment = ge.Encode();
-        shipEff.startTime = (abort ? (abortTime / EvE::Time::Second) : shipEff.timeNow - (timeLeft * EvE::Time::Second));
-        shipEff.duration = (abort ? 2000 : timeLeft);  // duration in seconds
-        shipEff.repeat = m_repeat;
-        // will need to check and update for data miners here  (any other cases?)
-        if ((groupID() == EVEDB::invGroups::Salvager) and IsSuccess() and (m_targetSE != nullptr)) {
-            // Create Destiny Updates:
-            PyTuple* type = new PyTuple(2);
-                type->SetItem(0, new PyInt(4));
-                type->SetItem(1, new PyInt(m_targetSE->GetTypeID()));
-            PyDict* dict = new PyDict;
-                dict->SetItemString("type", type);
-            PyTuple* tuple = new PyTuple(2);
-                tuple->SetItem(0, new PyString("SalvagingSuccess"));
-                tuple->SetItem(1, dict);
-            shipEff.error = tuple;
-        } else if (m_needsTarget and (m_targetSE == nullptr)) {
-            /*   these both give client warning -  [no messageID: 258855]
-            if (IsValidTarget(m_targetID)) {
-                PyDict* dict = new PyDict();
-                    dict->SetItemString("moduleID", new PyInt(m_modRef->itemID()));
-                    dict->SetItemString("targetID", new PyInt(m_targetID));
-                PyTuple* tuple = new PyTuple(2);
-                    tuple->SetItem(0, new PyString("TargetNoLongerPresent"));
-                    tuple->SetItem(1, dict);
-                shipEff.error = tuple;
-            } else {
-                PyDict* dict = new PyDict();
-                    dict->SetItemString("moduleID", new PyInt(m_modRef->itemID()));
-                PyTuple* tuple = new PyTuple(2);
-                    tuple->SetItem(0, new PyString("TargetNoLongerPresentGeneric"));
-                    tuple->SetItem(1, dict);
-                shipEff.error = tuple;
-            }
-            // this one doesnt work, either.
-            PyDict* dict = new PyDict();
-                dict->SetItemString("moduleID", new PyInt(m_modRef->itemID()));
-            PyTuple* tuple = new PyTuple(2);
-                tuple->SetItem(0, new PyString("TargetNoLongerPresentGeneric"));
-                tuple->SetItem(1, dict);
-            shipEff.error = PyStatic.NewNone();
-            m_shipRef->GetPilot()->SendNotification("TargetNoLongerPresentGeneric", "charid", &tuple);
-            */
-            m_targetID = 0;
-            // this is wrong....need to find error msg and insert here, but client throws error on above msgs
-            shipEff.error = PyStatic.NewNone();
-        /*
-         * {'messageKey': 'TargetNoLongerPresent', 'dataID': 17881666, 'suppressable': False, 'bodyID': 258855, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1626}
-         * u'TargetNoLongerPresentBody'}(u'{[item]moduleID.name} deactivates as the {[item]targetID.name} it was targeted at is no longer present.', None, {u'{[item]moduleID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'moduleID'}, u'{[item]targetID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'targetID'}})
-         * {'messageKey': 'TargetNoLongerPresentGeneric', 'dataID': 17875297, 'suppressable': False, 'bodyID': 256459, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 3742}
-         * u'TargetNoLongerPresentGenericBody'}(u'{[item]moduleID.name} deactivates as the item it was targeted at is no longer present.', None, {u'{[item]moduleID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'moduleID'}})
-         *
-         */
-        } else {
-            shipEff.error = PyStatic.NewNone();
-        }
-
-    PyTuple* tuple = shipEff.Encode();
-    if (is_log_enabled(EFFECTS__DUMP))
-        tuple->Dump(EFFECTS__DUMP, "");
-    if ((m_destinyMgr == nullptr)
-    or  (m_bubble == nullptr)
-    or   m_destinyMgr->IsWarping()) {
-        m_shipRef->GetPilot()->QueueDestinyEvent(&tuple);
-    } else {
-        m_bubble->BubblecastDestinyEvent(&tuple, "destiny");
-    }
+    // Do nothing else. No GenericEffect, ShipEffect, GUID, or QueueSpecialFX.
+    return;
 }
+
+
 /*
                   [PyTuple 12 items]
                     [PyString "OnGodmaShipEffect"]

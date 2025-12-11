@@ -68,6 +68,9 @@ m_launcher(false)
     
 void GenericModule::SetModuleState(int8 state)
 {
+    // Record the previous state for logging.
+    int8 oldState = m_ModuleState;
+
     // When leaving the Activated state, record a reactivation delay if the module defines one.
     if ((m_ModuleState == Module::State::Activated) && (state != Module::State::Activated)) {
         // Some modules (for example cloaks, MJDs, certain EWAR) declare a module reactivation delay.
@@ -83,6 +86,17 @@ void GenericModule::SetModuleState(int8 state)
     }
 
     m_ModuleState = state;
+
+    // Emit a trace log when the state actually changes so we can follow
+    // module state transitions in logs.
+    if (oldState != state) {
+        _log(MODULE__TRACE,
+             "GenericModule::SetModuleState() - %u(%s): %s -> %s",
+             itemID(),
+             m_modRef->name(),
+             GetModuleStateName(oldState),
+             GetModuleStateName(m_ModuleState));
+    }
 }
 
 
@@ -367,13 +381,6 @@ void GenericModule::ProcessEffects(int8 state, bool active/*false*/)
     }
 }
 
-bool GenericModule::IsActive()
-{
-    // A module is considered "active" while fully activated
-    // or in the process of shutting down its last cycle.
-    return (m_ModuleState == Module::State::Activated
-         || m_ModuleState == Module::State::Deactivating);
-}
 
 // not used
 void GenericModule::Repair(EvilNumber amount)
