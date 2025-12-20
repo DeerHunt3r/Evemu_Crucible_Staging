@@ -494,6 +494,19 @@ void Client::ProcessClient() {
                     } break;
                 case Player::State::LoginWarp: {
                     _log(CLIENT__TIMER, "ProcessClient()::CheckState():  case: LoginWarp");
+
+                    // Crucible: the client must have AddBalls + SetState accepted before we trigger the automatic
+                    // "login warp" to the nearest safe point / station. If we start the warp before the ballpark
+                    // is synchronized, the client may keep rendering straight-line motion and ignore warp state.
+                    UpdateBubble();
+
+                    // Wait until Beyonce (ballpark) and the system bubble are actually ready.
+                    if (!m_beyonce || pShipSE->SysBubble() == nullptr) {
+                        SetStateTimer(Player::State::LoginWarp, Player::Timer::Default);
+                        break;
+                    }
+
+                    // Trigger the warp. Visuals (warp tunnel + uncloaking) depend on FX being delivered as events.
                     pShipSE->DestinyMgr()->UnCloak();
                     pShipSE->DestinyMgr()->WarpTo(m_loginWarpPoint);
                     } break;

@@ -9,7 +9,7 @@
 #include "eve-server.h"
 
 #include "StaticDataMgr.h"
-//#include "StatisticMgr.h"
+#include "StatisticMgr.h"
 #include "character/Character.h"
 #include "inventory/Inventory.h"
 #include "ship/Ship.h"

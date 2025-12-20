@@ -37,7 +37,13 @@ bool PyVisitor::VisitTuple(const PyTuple* rep)
 {
     PyTuple::const_iterator itr = rep->begin(), end = rep->end();
     for (;  itr != end; ++itr) {
-        //  if/when segfault here and (*itr) == 0x0 then tuple count != tuple->SetItem()
+        // Defensive: nullptr entries indicate a producer forgot to SetItem() on a pre-sized tuple.
+        // Treat as None so the server doesn't segfault while marshalling.
+        if (*itr == nullptr) {
+            if (!PyStatic.NewNone()->visit(*this))
+                return false;
+            continue;
+        }
         if (!(*itr)->visit(*this))
             return false;
     }
@@ -47,9 +53,17 @@ bool PyVisitor::VisitTuple(const PyTuple* rep)
 bool PyVisitor::VisitList(const PyList* rep)
 {
     PyList::const_iterator itr = rep->begin(), end = rep->end();
-    for (;  itr != end; ++itr)
+    for (; itr != end; ++itr) {
+        // Defensive: nullptr entries indicate a producer forgot to SetItem() on a pre-sized list/tuple.
+        // Treat as None so the server doesn't segfault while marshalling.
+        if (*itr == nullptr) {
+            if (!PyStatic.NewNone()->visit(*this))
+                return false;
+            continue;
+        }
         if (!(*itr)->visit(*this))
             return false;
+    }
 
     return true;
 }

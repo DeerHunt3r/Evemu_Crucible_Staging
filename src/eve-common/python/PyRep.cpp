@@ -618,7 +618,11 @@ bool PyToken::visit( PyVisitor& v ) const
 /************************************************************************/
 /* PyRep Tuple Class                                                    */
 /************************************************************************/
-PyTuple::PyTuple( size_t item_count ) : PyRep( PyRep::PyTypeTuple ), items( item_count, nullptr ) {}
+PyTuple::PyTuple(size_t item_count) : PyRep(PyRep::PyTypeTuple), items(item_count, nullptr) {
+    // Initialize all slots to None to avoid nullptr entries (which crash marshalling).
+    for (size_t i = 0; i < item_count; ++i)
+        items[i] = PyStatic.NewNone();
+}
 PyTuple::PyTuple( const PyTuple& oth ) : PyRep( PyRep::PyTypeTuple ), items(oth.items)
 {
     //sLog.Cyan("PyTuple()", "Copy C'tor.");
@@ -686,7 +690,11 @@ int32 PyTuple::hash() const
 /************************************************************************/
 /* PyRep List Class                                                     */
 /************************************************************************/
-PyList::PyList(size_t item_count) : PyRep(PyRep::PyTypeList), items(item_count, nullptr) { }
+PyList::PyList(size_t item_count) : PyRep(PyRep::PyTypeList), items(item_count, nullptr) {
+    // Initialize all slots to None to avoid nullptr entries (which crash marshalling).
+    for (size_t i = 0; i < item_count; ++i)
+        items[i] = PyStatic.NewNone();
+}
 PyList::PyList(const PyList& oth) : PyRep(PyRep::PyTypeList), items(oth.items)
 {
     //sLog.Cyan("PyList()", "Copy C'tor.");
