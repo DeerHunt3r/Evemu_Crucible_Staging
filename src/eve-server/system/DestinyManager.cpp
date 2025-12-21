@@ -3289,6 +3289,23 @@ void DestinyManager::SendDestinyUpdate(std::vector<PyTuple*> &updates, bool self
 }
 
 void DestinyManager::SendDestinyUpdate( std::vector<PyTuple*>& updates, std::vector<PyTuple*>& events, bool self_only/*false*/) const {
+    // FX instrumentation: dump a tiny summary of destiny payloads when warp tracing is enabled
+    if (is_log_enabled(DESTINY__WARP_TRACE)) {
+        auto dumpTupleId = [](PyTuple* t) -> int {
+            if (t == nullptr) return -1;
+            PyRep* r0 = t->GetItem(0);
+            if (r0 != nullptr && r0->IsInt()) {
+                return ((PyInt*)r0)->value();
+            }
+            return -1;
+        };
+        const int u0 = updates.size() > 0 ? dumpTupleId(updates[0]) : -1;
+        const int e0 = events.size() > 0 ? dumpTupleId(events[0]) : -1;
+        _log(DESTINY__WARP_TRACE,
+            "Destiny::SendDestinyUpdate(): updates=%u (firstID=%i) events=%u (firstID=%i) self_only=%s",
+            (uint32)updates.size(), u0, (uint32)events.size(), e0, self_only ? "true" : "false");
+    }
+
     // this check shouldnt be needed...
     if (!mySE->SystemMgr()->IsLoaded()) {
         return;
