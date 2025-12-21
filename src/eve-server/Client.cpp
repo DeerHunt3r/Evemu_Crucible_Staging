@@ -2213,6 +2213,18 @@ void Client::QueueDestinyUpdate(PyTuple **update, bool DoPackage /*false*/, bool
 }
 
 void Client::_SendQueuedUpdates() {
+    // ----------------------------------------------------------------------
+    // Crucible FX instrumentation: track destiny traffic without altering math/bubbles
+    // ----------------------------------------------------------------------
+    if (is_log_enabled(COLLECT__PACKET_DUMP)) {
+        _log(COLLECT__PACKET_DUMP,
+            "Client::_SendQueuedUpdates(): %s updateQ=%u eventQ=%u bubbleWait=%s",
+            GetName(),
+            (uint32)m_destinyUpdateQueue->size(),
+            (uint32)m_destinyEventQueue->size(),
+            m_bubbleWait ? "true" : "false");
+    }
+
     if (!m_destinyUpdateQueue->empty()) {
         if (m_destinyEventQueue->empty()) {
             DoDestinyUpdateMain_2 dum;
@@ -2221,6 +2233,14 @@ void Client::_SendQueuedUpdates() {
             PyTuple* t = dum.Encode();
             if (is_log_enabled(CLIENT__QUEUE_DUMP))
                 t->Dump(CLIENT__QUEUE_DUMP, "");
+                        if (is_log_enabled(COLLECT__PACKET_DUMP)) {
+                _log(COLLECT__PACKET_DUMP,
+                    "Client::_SendQueuedUpdates(): %s sending DoDestinyUpdate updates=%u events=%u waitForBubble=%s",
+                    GetName(),
+                    (uint32)m_destinyUpdateQueue->size(),
+                    (uint32)m_destinyEventQueue->size(),
+                    m_bubbleWait ? "true" : "false");
+            }
             SendNotification("DoDestinyUpdate", "clientID", &t);
         } else {
             DoDestinyUpdateMain dum;
@@ -2230,6 +2250,14 @@ void Client::_SendQueuedUpdates() {
             PyTuple* t = dum.Encode();
             if (is_log_enabled(CLIENT__QUEUE_DUMP))
                 t->Dump(CLIENT__QUEUE_DUMP, "");
+                        if (is_log_enabled(COLLECT__PACKET_DUMP)) {
+                _log(COLLECT__PACKET_DUMP,
+                    "Client::_SendQueuedUpdates(): %s sending DoDestinyUpdate updates=%u events=%u waitForBubble=%s",
+                    GetName(),
+                    (uint32)m_destinyUpdateQueue->size(),
+                    (uint32)m_destinyEventQueue->size(),
+                    m_bubbleWait ? "true" : "false");
+            }
             SendNotification("DoDestinyUpdate", "clientID", &t);
         }
     } else if (!m_destinyEventQueue->empty()) {
@@ -2238,7 +2266,15 @@ void Client::_SendQueuedUpdates() {
         PyTuple* t = nom.Encode();
         if (is_log_enabled(CLIENT__QUEUE_DUMP))
             t->Dump(CLIENT__QUEUE_DUMP, "");
-        SendNotification("OnMultiEvent", "charid", &t);
+                    if (is_log_enabled(COLLECT__PACKET_DUMP)) {
+                _log(COLLECT__PACKET_DUMP,
+                    "Client::_SendQueuedUpdates(): %s sending OnMultiEvent updates=%u events=%u waitForBubble=%s",
+                    GetName(),
+                    (uint32)m_destinyUpdateQueue->size(),
+                    (uint32)m_destinyEventQueue->size(),
+                    m_bubbleWait ? "true" : "false");
+            }
+            SendNotification("OnMultiEvent", "charid", &t);
     } //else nothing to be sent ...
 
     // clear the queues now, after the packets have been sent
