@@ -29,6 +29,7 @@
 #include "network/Socket.h"
 #include "threading/Mutex.h"
 #include "utils/Buffer.h"
+#include <atomic>
 
 /** Size of error buffer TCPConnection uses. */
 static const uint32 TCPCONN_ERRBUF_SIZE = 1024;
@@ -74,6 +75,8 @@ public:
      */
     std::string GetAddress();
     /** @return Current state of connection. */
+    // Set true as soon as destruction begins; used to prevent virtual calls from IO thread during teardown.
+    std::atomic<bool> mDestructing{false};
     state_t GetState() const { return mSockState; }
 
     /**

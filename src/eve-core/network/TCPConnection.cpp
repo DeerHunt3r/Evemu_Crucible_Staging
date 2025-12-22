@@ -58,6 +58,8 @@ TCPConnection::TCPConnection(Socket* socket, uint32 mrIP, uint16 mrPort)
 
 TCPConnection::~TCPConnection()
 {
+    // Prevent IO thread from calling virtual methods while the object is being torn down.
+    mDestructing.store(true, std::memory_order_release);
     _log(THREAD__WARNING, "Destroying TCPConnection for thread 0x%X", std::this_thread::get_id());
     // Make sure we are disconnected
     Disconnect();
@@ -345,6 +347,9 @@ bool TCPConnection::RecvData(char* errbuf)
             return false;
         } else if (status) {
             mRecvBuf->Resize<uint8>(status);
+            // If destruction has begun, never call virtual handlers from this thread.
+            if (mDestructing.load(std::memory_order_acquire))
+                return false;
             if (!ProcessReceivedData(errbuf))
                 return false;
         } else {
