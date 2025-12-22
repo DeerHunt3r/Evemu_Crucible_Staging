@@ -543,7 +543,8 @@ void DestinyManager::Stop() {
         du.entityID = mySE->GetID();
     PyTuple *up = du.Encode();
     SendSingleDestinyUpdate(&up);
-    PyDecRef(up);
+    // consumed
+    up = nullptr;
 }
 
 void DestinyManager::Halt() {
@@ -702,6 +703,21 @@ void DestinyManager::Bounce(GVector direction, float speed)
 void DestinyManager::MoveObject() {
     if (mySE->SysBubble() == nullptr)
         mySE->SystemMgr()->AddEntity(mySE);
+ 
+ // DEBUG: snapshot every tick before we do any movement math.
+    if (is_log_enabled(DESTINY__MOVE_DEBUG) && mySE->IsShipSE() && mySE->HasPilot()) {
+        _log(
+            DESTINY__MOVE_DEBUG,
+            "MoveTick: %s(%u) mode=%u asf=%.4f usf=%.4f tf=%.4f "
+            "pos=(%.1f,%.1f,%.1f) head=(%.3f,%.3f,%.3f) target=(%.1f,%.1f,%.1f)",
+            mySE->GetName(), mySE->GetID(),
+            m_ballMode,
+            m_activeSpeedFraction, m_userSpeedFraction, m_timeFraction,
+            m_position.x, m_position.y, m_position.z,
+            m_shipHeading.x, m_shipHeading.y, m_shipHeading.z,
+            m_targetPoint.x, m_targetPoint.y, m_targetPoint.z
+        );
+    }
 
     if (m_stateStamp > sEntityList.GetStamp()) {
         if (is_log_enabled(DESTINY__MOVE_TRACE))
@@ -870,6 +886,18 @@ void DestinyManager::MoveObject() {
 
     //set velocity and position for this tic
     m_velocity = m_shipHeading * speed;
+        if (is_log_enabled(DESTINY__MOVE_DEBUG) && mySE->IsShipSE() && mySE->HasPilot()) {
+        _log(
+            DESTINY__MOVE_DEBUG,
+            "MoveApply: %s(%u) mode=%u speed=%.2f asf=%.4f usf=%.4f tf=%.4f "
+            "posBefore=(%.1f,%.1f,%.1f) vel=(%.3f,%.3f,%.3f) head=(%.3f,%.3f,%.3f)",
+            mySE->GetName(), mySE->GetID(), m_ballMode,
+            speed, m_activeSpeedFraction, m_userSpeedFraction, m_timeFraction,
+            m_position.x, m_position.y, m_position.z,
+            m_velocity.x, m_velocity.y, m_velocity.z,
+            m_shipHeading.x, m_shipHeading.y, m_shipHeading.z
+        );
+    }
     SetPosition(m_position + m_velocity, sConfig.debug.PositionHack);   // (PositionHack == true) here will force position update to client
 
     if (is_log_enabled(DESTINY__MOVE_DEBUG))
@@ -1778,12 +1806,27 @@ void DestinyManager::WarpUpdate(double currentShipSpeed) {
 }
 
 void DestinyManager::WarpStop(double currentShipSpeed) {
-    if (is_log_enabled(DESTINY__WARP_TRACE)) {
+       
+       if (is_log_enabled(DESTINY__WARP_TRACE)) {
         _log(DESTINY__WARP_TRACE, "Destiny::WarpStop(): %s(%u) - Warp complete. Exit velocity %.4f m/s with %.2f m left to go.", \
                 mySE->GetName(), mySE->GetID(), currentShipSpeed, m_targetDistance);
         _log(DESTINY__WARP_TRACE, "Destiny::WarpStop(): %s(%u): Ship currently at %.2f,%.2f,%.2f.", \
                 mySE->GetName(), mySE->GetID(), m_position.x, m_position.y, m_position.z);
+
+        _log(
+            DESTINY__WARP_TRACE,
+            "Destiny::WarpStop(): %s(%u) pre-decel state: mode=%u speedToLeaveWarp=%.2f "
+            "mss=%.2f asf=%.4f usf=%.4f tf=%.4f",
+            mySE->GetName(), mySE->GetID(),
+            m_ballMode,
+            m_speedToLeaveWarp,
+            m_maxShipSpeed,
+            m_activeSpeedFraction,
+            m_userSpeedFraction,
+            m_timeFraction
+        );
     }
+    
     if (mySE->IsShipSE()) {
         _log(AUTOPILOT__MESSAGE, "Destiny::WarpStop(): %s(%u) - Warp complete.", mySE->GetName(), mySE->GetID());
         mySE->GetPilot()->SetLoginWarpComplete();
@@ -2639,6 +2682,19 @@ Battleships 0.155
     m_timeToEnterWarp = m_alignTime;
 
     m_hasSentShipUpdates = true;
+    
+     if (is_log_enabled(DESTINY__MOVE_DEBUG) && mySE->IsShipSE()) {
+        _log(
+            DESTINY__MOVE_DEBUG,
+            "ShipVars: %s(%u) mass=%.3f inertia=%.3f agility=%.5f "
+            "maxShipSpeed=%.2f warpSpeed=%.2f speedToLeaveWarp=%.2f "
+            "alignTime=%.3f maxAccelTime=%.3f",
+            mySE->GetName(), mySE->GetID(),
+            m_mass, m_shipInertia, m_shipAgility,
+            m_maxShipSpeed, m_shipWarpSpeed, m_speedToLeaveWarp,
+            m_alignTime, m_shipMaxAccelTime
+        );
+    }
 
     if (!mySE->HasPilot())
         return;
@@ -3023,43 +3079,97 @@ void DestinyManager::SendCloakFx(bool apply/*false*/, bool module/*false*/) cons
 
 // def OnSpecialFX(shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid, isOffensive, start, active, duration = -1, repeat = None, startTime = None, graphicInfo = None):
 
-void DestinyManager::SendSpecialEffect10(uint32 entityID, uint32 targetID, std::string guid, bool isOffensive, bool start, bool isActive) const
+void DestinyManager::SendSpecialEffect10(
+    uint32 entityID,
+    uint32 targetID,
+    std::string guid,
+    bool isOffensive,
+    bool start,
+    bool isActive
+) const
 {
+    // FX logging for the simplified SpecialFX10 packet
+    if (is_log_enabled(DESTINY__TRACE)) {
+        _log(
+            DESTINY__TRACE,
+            "SendSpecialEffect10: entityID=%u targetID=%u guid='%s' offensive=%s start=%s active=%s",
+            entityID,
+            targetID,
+            guid.c_str(),
+            isOffensive ? "true" : "false",
+            start       ? "true" : "false",
+            isActive    ? "true" : "false"
+        );
+    }
+
     OnSpecialFX10 effect;
-        effect.entityID = entityID;
-        effect.targetID = targetID;
-        effect.guid = guid;
-        effect.area = new PyList();     // this is unused variable in client.
-        effect.isOffensive = isOffensive;
-        effect.start = start;
-        effect.active = isActive;
-    PyTuple *up = effect.Encode();
+    effect.entityID    = entityID;
+    effect.targetID    = targetID;
+    effect.guid        = guid;
+    effect.area        = new PyList();   // unused on the client, but packet expects it
+    effect.isOffensive = isOffensive;
+    effect.start       = start;
+    effect.active      = isActive;
+
+    PyTuple* up = effect.Encode();
     SendSingleDestinyUpdate(&up);   // consumed
 }
 
-// def OnSpecialFX(shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid, isOffensive, start, active, duration = -1, repeat = None, startTime = None, graphicInfo = None):
-
-void DestinyManager::SendSpecialEffect(uint32 entityID, uint32 moduleID, uint32 moduleTypeID, uint32 targetID,
-                                       uint32 chargeTypeID, std::string guid, bool isOffensive, bool start,
-                                       bool isActive, int32 duration, uint32 repeat, int32 graphicInfo/*0*/) const
+void DestinyManager::SendSpecialEffect(
+    uint32 entityID,
+    uint32 moduleID,
+    uint32 moduleTypeID,
+    uint32 targetID,
+    uint32 chargeTypeID,
+    std::string guid,
+    bool isOffensive,
+    bool start,
+    bool isActive,
+    int32 duration,
+    uint32 repeat,
+    int32 graphicInfo/*0*/
+) const
 {
+    // Log every attempt (guarded by DESTINY__TRACE)
+    if (is_log_enabled(DESTINY__TRACE)) {
+        _log(DESTINY__TRACE,
+            "SendSpecialEffect: entity=%u module=%u(type=%u) target=%u chargeType=%u guid='%s' offensive=%s start=%s active=%s duration=%i repeat=%u graphicInfo=%i",
+            entityID, moduleID, moduleTypeID, targetID, chargeTypeID, guid.c_str(),
+            (isOffensive ? "true" : "false"),
+            (start ? "true" : "false"),
+            (isActive ? "true" : "false"),
+            duration, repeat, graphicInfo
+        );
+    }
+
     OnSpecialFX14 effect;
-        effect.entityID = entityID;
-        effect.moduleID = moduleID;
-        effect.moduleTypeID = moduleTypeID;     // npc typeID for npc's/drones
-        effect.targetID = (targetID == 0 ? PyStatic.NewNone() : new PyInt(targetID));
-        effect.chargeTypeID = (chargeTypeID == 0 ? PyStatic.NewNone() : new PyInt(chargeTypeID));
-        effect.guid = guid;
-        effect.isOffensive = isOffensive;                  // bool
-        effect.start = start;                   // bool
-        effect.active = isActive;                  // bool
-        effect.duration = duration;
-        effect.repeat = repeat;
-        effect.startTime = GetFileTimeNow();
-        effect.graphicInfo = (graphicInfo == 0 ? PyStatic.NewNone() : new PyInt(graphicInfo));
-    PyTuple *up = effect.Encode();
-    SendSingleDestinyUpdate(&up);   // consumed
+    effect.entityID      = entityID;
+    effect.moduleID      = moduleID;
+    effect.moduleTypeID  = moduleTypeID;
+
+    // Optional fields: send None when zero
+    effect.targetID      = (targetID == 0 ? PyStatic.NewNone() : new PyInt(targetID));
+    effect.chargeTypeID  = (chargeTypeID == 0 ? PyStatic.NewNone() : new PyInt(chargeTypeID));
+
+    effect.guid          = guid;
+    effect.area          = new PyList(); // client ignores this for this packet
+    effect.isOffensive   = isOffensive;
+    effect.start         = start;
+    effect.active        = isActive;
+    effect.duration      = duration;
+    effect.repeat        = repeat;
+
+    // In your build this field is a PyRep*
+    effect.graphicInfo   = (graphicInfo == 0 ? PyStatic.NewNone() : new PyInt(graphicInfo));
+
+    PyTuple* up = effect.Encode();
+    SendSingleDestinyUpdate(&up);
 }
+
+
+
+
+
 /*
                   [PyTuple 2 items]
                     [PyInt 62565]
@@ -3266,8 +3376,9 @@ void DestinyManager::SendSetState() const {
 
 void DestinyManager::SendMovementPacket()
 {
+    // SendSingleDestinyUpdate consumes the packet (it will be decref'd in SendDestinyUpdate)
     SendSingleDestinyUpdate(&mvPacket);
-    PySafeDecRef(mvPacket);
+    mvPacket = nullptr;
 }
 
 void DestinyManager::SendSingleDestinyEvent(PyTuple** ev, bool self_only/*false*/) const
@@ -3275,133 +3386,101 @@ void DestinyManager::SendSingleDestinyEvent(PyTuple** ev, bool self_only/*false*
     std::vector<PyTuple*> updates;
     std::vector<PyTuple*> events(1, *ev);   // create vector of size "1" and insert "*ev" into it
     SendDestinyUpdate(updates, events, self_only);
+    *ev = nullptr; // consumed by SendDestinyUpdate/queue
 }
 
-void DestinyManager::SendSingleDestinyUpdate(PyTuple **up, bool self_only/*false*/) const {
+void DestinyManager::SendSingleDestinyUpdate(PyTuple **up, bool self_only/*false*/) const
+{
     std::vector<PyTuple*> updates(1, *up);   // create vector of size "1" and insert "*up" into it
     std::vector<PyTuple*> events;
     SendDestinyUpdate(updates, events, self_only);
+    *up = nullptr; // consumed by SendDestinyUpdate/queue
 }
 
-void DestinyManager::SendDestinyUpdate(std::vector<PyTuple*> &updates, bool self_only/*false*/) const {
+
+void DestinyManager::SendDestinyUpdate(std::vector<PyTuple*> &updates, bool self_only/*false*/) const
+{
     std::vector<PyTuple*> events;
     SendDestinyUpdate(updates, events, self_only);
 }
 
-void DestinyManager::SendDestinyUpdate( std::vector<PyTuple*>& updates, std::vector<PyTuple*>& events, bool self_only/*false*/) const {
-    // FX instrumentation: dump a tiny summary of destiny payloads when warp tracing is enabled
-    if (is_log_enabled(DESTINY__WARP_TRACE)) {
-        auto dumpTupleId = [](PyTuple* t) -> int {
-            if (t == nullptr) return -1;
-            PyRep* r0 = t->GetItem(0);
-            if (r0 != nullptr && r0->IsInt()) {
-                return ((PyInt*)r0)->value();
-            }
-            return -1;
-        };
-        const int u0 = updates.size() > 0 ? dumpTupleId(updates[0]) : -1;
-        const int e0 = events.size() > 0 ? dumpTupleId(events[0]) : -1;
-        _log(DESTINY__WARP_TRACE,
-            "Destiny::SendDestinyUpdate(): updates=%u (firstID=%i) events=%u (firstID=%i) self_only=%s",
-            (uint32)updates.size(), u0, (uint32)events.size(), e0, self_only ? "true" : "false");
-    }
-
-    // this check shouldnt be needed...
-    if (!mySE->SystemMgr()->IsLoaded()) {
+void DestinyManager::SendDestinyUpdate(std::vector<PyTuple*>& updates, std::vector<PyTuple*>& events, bool self_only/*false*/) const
+{
+    // If system isn't fully loaded yet, do nothing (prevents weird early sends)
+    if (mySE == nullptr || mySE->SystemMgr() == nullptr || !mySE->SystemMgr()->IsLoaded()) {
         return;
     }
 
+    // 1) Self-only (queue to the pilot/client only)
     if (self_only) {
         if (!mySE->HasPilot()) {
-            // this entity is NOT a player ship...change to BubbleCast (or silently fail)
+            // Not a player ship. If it's in a bubble, bubblecast instead.
             if (mySE->SysBubble() != nullptr) {
-                if (is_log_enabled(DESTINY__UPDATES))
-                    _log(
-                        DESTINY__UPDATES,
-                        "[%u] BubbleCasting destiny update (u:%lu, e:%lu) for stamp %u to bubbleID %u from %s(%u)",
-                        sEntityList.GetStamp(),
-                        updates.size(),
-                        events.size(),
-                        sEntityList.GetStamp(),
-                        mySE->SysBubble()->GetID(),
-                        mySE->GetName(),
-                        mySE->GetID()
-                    );
-                mySE->SysBubble()->BubblecastDestiny(updates, events, "destiny" );
+                mySE->SysBubble()->BubblecastDestiny(updates, events, "destiny");
             }
-
             return;
         }
 
-        if (is_log_enabled(PLAYER__MESSAGE))
-            _log(PLAYER__MESSAGE, "[%u] DestinyManager::SendDestinyUpdate() (u:%lu, e:%lu) called as 'self_only' for %s(%i)", \
-                    sEntityList.GetStamp(), updates.size(), events.size(), mySE->GetPilot()->GetName(), mySE->GetPilot()->GetCharacterID());
+        Client* c = mySE->GetPilot();
+        if (c == nullptr) {
+            return;
+        }
 
-        for (std::vector<PyTuple*>::iterator itr = updates.begin(); itr != updates.end(); ++itr) {
+        // Queue updates (DoDestinyUpdate packaged actions)
+        for (auto itr = updates.begin(); itr != updates.end(); ++itr) {
+            if (*itr == nullptr)
+                continue;
             PyIncRef(*itr);
-            mySE->GetPilot()->QueueDestinyUpdate(&(*itr));
+            c->QueueDestinyUpdate(&(*itr));
         }
 
-        for (std::vector<PyTuple*>::iterator itr = events.begin(); itr != events.end(); ++itr) {
+        // Queue events (OnMultiEvent)
+        for (auto itr = events.begin(); itr != events.end(); ++itr) {
+            if (*itr == nullptr)
+                continue;
             PyIncRef(*itr);
-            mySE->GetPilot()->QueueDestinyEvent(&(*itr));
-        }
-    } else if (mySE->IsOperSE()) { //These are global entities, so we have to send update to all bubbles in a system
-        if (is_log_enabled(DESTINY__UPDATES)) {
-            _log(
-                DESTINY__UPDATES,
-                "[%u] BubbleCasting global structure destiny update (u:%u, e:%u) for stamp %u to all bubbles from %s(%u)",
-                sEntityList.GetStamp(),
-                updates.size(),
-                events.size(),
-                sEntityList.GetStamp(),
-                (mySE->HasPilot()?mySE->GetPilot()->GetName():mySE->GetName()),
-                (mySE->HasPilot()?mySE->GetPilot()->GetCharID():mySE->GetID())
-            );
+            c->QueueDestinyEvent(&(*itr));
         }
 
-        //Get all clients in the system which the SE is in
-        /** @todo  this isnt right....will segfault.  needs to be fixed */
-        std::vector<Client*> cv;
-
-        mySE->SystemMgr()->GetClientList(cv);
-
-        for(auto const& value: cv) {
-             if (value->GetShipSE() != nullptr) {
-                value->GetShipSE()->SysBubble()->BubblecastDestiny(updates, events, "destiny");
-            }
-        }
-    } else if (mySE->SysBubble() != nullptr) {
-        if (is_log_enabled(DESTINY__UPDATES)) {
-            _log(
-                DESTINY__UPDATES,
-                "[%u] BubbleCasting destiny update (u:%u, e:%u) for stamp %u to bubbleID %u from %s(%u)",
-                sEntityList.GetStamp(),
-                updates.size(),
-                events.size(),
-                sEntityList.GetStamp(),
-                mySE->SysBubble()->GetID(),
-                (mySE->HasPilot()?mySE->GetPilot()->GetName():mySE->GetName()),
-                (mySE->HasPilot()?mySE->GetPilot()->GetCharID():mySE->GetID())
-            );
-        }
-
-        mySE->SysBubble()->BubblecastDestiny( updates, events, "destiny" );
-    } else {
-        _log(
-            DESTINY__ERROR,
-            "[%u] Cannot BubbleCast destiny update (u:%u, e:%u); entity (%u) is not in any bubble.",
-            sEntityList.GetStamp(),
-            updates.size(),
-            events.size(),
-            mySE->GetID()
-        );
-
-        // if (sConfig.debug.IsTestServer) {
-        //     EvE::traceStack();
-        // }
-
-        //sBubbleMgr.Add(mySE);
-        //mySE->SysBubble()->BubblecastDestiny( updates, events, "destiny" );
+        return;
     }
+
+    // 2) Global entities (structures, beacons, etc.) need to reach everyone in the system.
+    // We'll get all clients in system, and bubblecast into each client ship's bubble.
+    if (mySE->IsOperSE()) {
+        std::vector<Client*> clients;
+        mySE->SystemMgr()->GetClientList(clients);
+
+        for (auto const& c : clients) {
+            if (c == nullptr)
+                continue;
+
+            ShipSE* shipSE = c->GetShipSE();
+            if (shipSE == nullptr)
+                continue;
+
+            SystemBubble* b = shipSE->SysBubble();
+            if (b == nullptr)
+                continue;
+
+            b->BubblecastDestiny(updates, events, "destiny");
+        }
+
+        return;
+    }
+
+    // 3) Normal case: bubblecast to the bubble we are currently in.
+    if (mySE->SysBubble() != nullptr) {
+        mySE->SysBubble()->BubblecastDestiny(updates, events, "destiny");
+        return;
+    }
+
+    // 4) Not in a bubble: log and fail quietly (prevents crashes)
+    _log(DESTINY__ERROR,
+        "[%u] DestinyManager::SendDestinyUpdate() Cannot BubbleCast (u:%u, e:%u); entity (%u) is not in any bubble.",
+        sEntityList.GetStamp(),
+        updates.size(),
+        events.size(),
+        (mySE != nullptr ? mySE->GetID() : 0)
+    );
 }

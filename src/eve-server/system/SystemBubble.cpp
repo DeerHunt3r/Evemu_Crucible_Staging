@@ -347,8 +347,8 @@ void SystemBubble::Add(SystemEntity* pSE) {
     _log(
         DESTINY__BUBBLE_DEBUG,
         "SystemBubble::Add() - Added pSE %p (%s) to bubble %u",
-        pSE->GetName(),
         pSE,
+        pSE->GetName(),
         m_bubbleID
     );
 

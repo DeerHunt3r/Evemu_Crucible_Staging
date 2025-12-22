@@ -2166,12 +2166,38 @@ void Client::FlushQueue() {
         _SendQueuedUpdates();
 }
 
-void Client::QueueDestinyEvent(PyTuple** event) {
-    if ((event == nullptr) or ((*event) == nullptr))
-        return;
-    m_destinyEventQueue->AddItem(*event);
-    //PyDecRef(*event);
+void Client::QueueDestinyEvent(PyTuple** multiEvent)
+{
+    // Add multiEvent to be inserted into OnMultiEvent packet.
+    //
+    // IMPORTANT:
+    // Some call-sites accidentally pass a "packaged" tuple shaped like:
+    //     (eventStamp:int, event:tuple)
+    // The Crucible client expects OnMultiEvent's event list entries to be the *event tuple*,
+    // not the packaged wrapper. If we queue the wrapper, michelle.py can blow up and the
+    // client stops processing destiny state (ship appears stuck / no warp tunnel / no movement).
+    //
+    // So: if we see (int, tuple), unwrap it and queue only the tuple.
+
+    PyTuple* ev = *multiEvent;
+    if (ev != nullptr) {
+        // We avoid relying on any one "size()" API by probing items defensively.
+        // If your PyTuple implementation doesn't support GetItem(), you'll get a compile error
+        // and we’ll adjust to the correct accessor used in this codebase.
+        PyRep* a = ev->GetItem(0);
+        PyRep* b = ev->GetItem(1);
+
+        if ((a != nullptr) && (b != nullptr)) {
+            if ((dynamic_cast<PyInt*>(a) != nullptr) && (dynamic_cast<PyTuple*>(b) != nullptr)) {
+                m_destinyEventQueue->AddItem(b);
+                return;
+            }
+        }
+    }
+
+    m_destinyEventQueue->AddItem(ev);
 }
+
 
 void Client::QueueDestinyUpdate(PyTuple **update, bool DoPackage /*false*/, bool IsSetState /*false*/) {
     if ((update == nullptr) or ((*update) == nullptr))
@@ -2212,116 +2238,130 @@ void Client::QueueDestinyUpdate(PyTuple **update, bool DoPackage /*false*/, bool
     }
 }
 
-void Client::_SendQueuedUpdates() {
-    // ----------------------------------------------------------------------
-    // Crucible FX instrumentation: track destiny traffic without altering math/bubbles
-    // ----------------------------------------------------------------------
-    if (is_log_enabled(COLLECT__PACKET_DUMP)) {
-        _log(COLLECT__PACKET_DUMP,
-            "Client::_SendQueuedUpdates(): %s updateQ=%u eventQ=%u bubbleWait=%s",
-            GetName(),
-            (uint32)m_destinyUpdateQueue->size(),
-            (uint32)m_destinyEventQueue->size(),
-            m_bubbleWait ? "true" : "false");
+
+void Client::_SendQueuedUpdates()
+{
+    // Nothing queued? Nothing to do.
+    if (m_destinyUpdateQueue == nullptr || m_destinyEventQueue == nullptr)
+        return;
+
+    const uint32 updateCount = (uint32)m_destinyUpdateQueue->size();
+    const uint32 eventCount  = (uint32)m_destinyEventQueue->size();
+
+    if (updateCount == 0 && eventCount == 0)
+        return;
+
+    // NOTE:
+    // Always use the PyTuple** SendNotification overload so dest.objectID is set (GetClientID()).
+    // This is critical for destiny packets (targeting/ballpark events) to reliably reach the client.
+
+    if (updateCount > 0 && eventCount > 0)
+    {
+        // Send both update and event in same packet
+        DoDestinyUpdateMain dum;
+        dum.updates       = m_destinyUpdateQueue;
+        dum.events        = m_destinyEventQueue;
+        dum.waitForBubble = m_bubbleWait;
+
+        PyTuple* t = dum.Encode();
+        if (t != nullptr)
+        {
+            SendNotification("DoDestinyUpdate", "clientID", &t);
+            PySafeDecRef(t);
+        }
+
+        // Clear after sending.
+        m_destinyUpdateQueue->clear();
+        m_destinyEventQueue->clear();
+        m_bubbleWait = false;
+        return;
     }
 
-    if (!m_destinyUpdateQueue->empty()) {
-        if (m_destinyEventQueue->empty()) {
-            DoDestinyUpdateMain_2 dum;
-                dum.updates = m_destinyUpdateQueue;
-                dum.waitForBubble = m_bubbleWait;
-            PyTuple* t = dum.Encode();
-            if (is_log_enabled(CLIENT__QUEUE_DUMP))
-                t->Dump(CLIENT__QUEUE_DUMP, "");
-                        if (is_log_enabled(COLLECT__PACKET_DUMP)) {
-                _log(COLLECT__PACKET_DUMP,
-                    "Client::_SendQueuedUpdates(): %s sending DoDestinyUpdate updates=%u events=%u waitForBubble=%s",
-                    GetName(),
-                    (uint32)m_destinyUpdateQueue->size(),
-                    (uint32)m_destinyEventQueue->size(),
-                    m_bubbleWait ? "true" : "false");
-            }
-            SendNotification("DoDestinyUpdate", "clientID", &t);
-        } else {
-            DoDestinyUpdateMain dum;
-                dum.updates = m_destinyUpdateQueue;
-                dum.events = m_destinyEventQueue;
-                dum.waitForBubble = m_bubbleWait;
-            PyTuple* t = dum.Encode();
-            if (is_log_enabled(CLIENT__QUEUE_DUMP))
-                t->Dump(CLIENT__QUEUE_DUMP, "");
-                        if (is_log_enabled(COLLECT__PACKET_DUMP)) {
-                _log(COLLECT__PACKET_DUMP,
-                    "Client::_SendQueuedUpdates(): %s sending DoDestinyUpdate updates=%u events=%u waitForBubble=%s",
-                    GetName(),
-                    (uint32)m_destinyUpdateQueue->size(),
-                    (uint32)m_destinyEventQueue->size(),
-                    m_bubbleWait ? "true" : "false");
-            }
-            SendNotification("DoDestinyUpdate", "clientID", &t);
-        }
-    } else if (!m_destinyEventQueue->empty()) {
-        Notify_OnMultiEvent nom;
-            nom.events = m_destinyEventQueue;
-        PyTuple* t = nom.Encode();
-        if (is_log_enabled(CLIENT__QUEUE_DUMP))
-            t->Dump(CLIENT__QUEUE_DUMP, "");
-                    if (is_log_enabled(COLLECT__PACKET_DUMP)) {
-                _log(COLLECT__PACKET_DUMP,
-                    "Client::_SendQueuedUpdates(): %s sending OnMultiEvent updates=%u events=%u waitForBubble=%s",
-                    GetName(),
-                    (uint32)m_destinyUpdateQueue->size(),
-                    (uint32)m_destinyEventQueue->size(),
-                    m_bubbleWait ? "true" : "false");
-            }
-            SendNotification("OnMultiEvent", "charid", &t);
-    } //else nothing to be sent ...
+    if (eventCount > 0)
+    {
+        // Flush queued OnMultiEvent packets.
+        for (uint32 i = 0; i < eventCount; ++i)
+        {
+            PyRep* rep = m_destinyEventQueue->GetItem(i);
+            if (rep == nullptr)
+                continue;
 
-    // clear the queues now, after the packets have been sent
-    m_destinyUpdateQueue->clear();
-    m_destinyEventQueue->clear();
-    m_packaged = false;
+            PyTuple* t = rep->AsTuple();
+            if (t == nullptr)
+                continue;
+
+            // IMPORTANT: must be "OnMultiEvent" and should be sent to clientID
+            SendNotification("OnMultiEvent", "clientID", &t);
+        }
+
+        // Clear after sending.
+        m_destinyEventQueue->clear();
+    }
+
+    if (updateCount > 0)
+    {
+        DoDestinyUpdateMain_2 dum;
+        dum.updates       = m_destinyUpdateQueue;
+        dum.waitForBubble = m_bubbleWait;
+
+        PyTuple* t = dum.Encode();
+        if (t != nullptr)
+        {
+            SendNotification("DoDestinyUpdate", "clientID", &t);
+            PySafeDecRef(t);
+        }
+
+        // Clear after sending.
+        m_destinyUpdateQueue->clear();
+        m_bubbleWait = false;
+    }
 }
 
-void Client::SendNotification(const char *notifyType, const char *idType, PyTuple *payload, bool seq /*true*/) {
-    //build a little notification out of it.
+
+void Client::SendNotification(const char *notifyType, const char *idType, PyTuple *payload, bool seq /*true*/)
+{
+    if (payload == nullptr)
+        return;
+
+    // Treat payload as BORROWED here; notification encode will consume a ref.
+    PyIncRef(payload);
+
     EVENotificationStream notify;
     notify.notifyType = notifyType;
     notify.remoteObject = 1;
     notify.args = payload;
 
     PyAddress dest;
-    // are all of these 'Broadcast'?
     dest.type = PyAddress::Broadcast;
     dest.service = notifyType;
     dest.bcast_idtype = idType;
-    /*
-    if (dest.bcast_idtype.compare("clientID") == 0)
-        dest.objectID = GetClientID();*/
+    dest.objectID = GetClientID();
 
-    //now send it to the client
     SendNotification(dest, notify, seq);
 }
 
-void Client::SendNotification(const char *notifyType, const char *idType, PyTuple **payload, bool seq /*true*/) {
-    if ((*payload) == nullptr)
+void Client::SendNotification(const char *notifyType, const char *idType, PyTuple **payload, bool seq /*true*/)
+{
+    if (payload == nullptr || (*payload) == nullptr)
         return;
-    //build a little notification out of it.
+
+    // Treat payload as BORROWED here; notification encode will consume a ref.
+    PyIncRef(*payload);
+
     EVENotificationStream notify;
-        notify.notifyType = notifyType;
-        notify.remoteObject = 1;
-        notify.args = (*payload);
+    notify.notifyType = notifyType;
+    notify.remoteObject = 1;
+    notify.args = (*payload);
 
     PyAddress dest;
-    // are all of these 'Broadcast'?
-        dest.type = PyAddress::Broadcast;
-        dest.service = notifyType;
-        dest.bcast_idtype = idType;
-        dest.objectID = GetClientID();
+    dest.type = PyAddress::Broadcast;
+    dest.service = notifyType;
+    dest.bcast_idtype = idType;
+    dest.objectID = GetClientID();
 
-    //now send it to the client
     SendNotification(dest, notify, seq);
 }
+
 
 void Client::SendNotification(const PyAddress &dest, EVENotificationStream &noti, bool seq/*true*/) {
     sLog.Blue("Client::SendNotification",
