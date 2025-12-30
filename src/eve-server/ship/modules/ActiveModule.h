@@ -107,6 +107,7 @@ protected:
     bool                m_needsTarget :1;
 
 private:
+    
     Timer               m_timer;
     Timer               m_reloadTimer;
 

@@ -2169,34 +2169,38 @@ void Client::FlushQueue() {
 void Client::QueueDestinyEvent(PyTuple** multiEvent)
 {
     // Add multiEvent to be inserted into OnMultiEvent packet.
-    //
+    // The Crucible client expects OnMultiEvent's event list entries to be the *event tuple*.
+
+    PyTuple* ev = (multiEvent != nullptr ? *multiEvent : nullptr);
+    if (ev == nullptr || m_destinyEventQueue == nullptr)
+        return;
+
+    // If we were handed a wrapper ("OnMultiEvent", <eventTuple>), unwrap it safely.
     // IMPORTANT:
-    // Some call-sites accidentally pass a "packaged" tuple shaped like:
-    //     (eventStamp:int, event:tuple)
-    // The Crucible client expects OnMultiEvent's event list entries to be the *event tuple*,
-    // not the packaged wrapper. If we queue the wrapper, michelle.py can blow up and the
-    // client stops processing destiny state (ship appears stuck / no warp tunnel / no movement).
-    //
-    // So: if we see (int, tuple), unwrap it and queue only the tuple.
-
-    PyTuple* ev = *multiEvent;
-    if (ev != nullptr) {
-        // We avoid relying on any one "size()" API by probing items defensively.
-        // If your PyTuple implementation doesn't support GetItem(), you'll get a compile error
-        // and we’ll adjust to the correct accessor used in this codebase.
+    // - 'ev' is expected to be "consumed" by this queue function.
+    // - Item(1) is owned by 'ev'. If we only enqueue the child without adjusting refcounts,
+    //   the wrapper and the queue will both try to DecRef it later -> refcount assert/abort.
+    if (ev->size() == 2) {
         PyRep* a = ev->GetItem(0);
-        PyRep* b = ev->GetItem(1);
+        if (a != nullptr && a->IsString()) {
+            PyString* s = (PyString*)a;
+            if (s->content() == "OnMultiEvent") {
+                PyRep* inner = ev->GetItem(1);
+                if (inner != nullptr && inner->IsTuple()) {
+                    PyIncRef(inner);                 // queue takes ownership of this ref
+                    m_destinyEventQueue->AddItem(inner);
+                }
 
-        if ((a != nullptr) && (b != nullptr)) {
-            if ((dynamic_cast<PyInt*>(a) != nullptr) && (dynamic_cast<PyTuple*>(b) != nullptr)) {
-                m_destinyEventQueue->AddItem(b);
+                PyDecRef(ev);                        // consume wrapper
                 return;
             }
         }
     }
 
+    // Normal case: queue consumes the tuple.
     m_destinyEventQueue->AddItem(ev);
 }
+
 
 
 void Client::QueueDestinyUpdate(PyTuple **update, bool DoPackage /*false*/, bool IsSetState /*false*/) {
@@ -2255,9 +2259,9 @@ void Client::_SendQueuedUpdates()
     // Always use the PyTuple** SendNotification overload so dest.objectID is set (GetClientID()).
     // This is critical for destiny packets (targeting/ballpark events) to reliably reach the client.
 
+    // 1) If we have both updates + events, DoDestinyUpdate carries both lists (this already matches Destiny.xmlp)
     if (updateCount > 0 && eventCount > 0)
     {
-        // Send both update and event in same packet
         DoDestinyUpdateMain dum;
         dum.updates       = m_destinyUpdateQueue;
         dum.events        = m_destinyEventQueue;
@@ -2277,27 +2281,36 @@ void Client::_SendQueuedUpdates()
         return;
     }
 
+    // 2) Events only: MUST be sent as OnMultiEvent( [eventTuple, eventTuple, ...] )
     if (eventCount > 0)
     {
-        // Flush queued OnMultiEvent packets.
+        // Build the event list the Crucible client expects.
+        PyList* evList = new PyList();
+
         for (uint32 i = 0; i < eventCount; ++i)
         {
             PyRep* rep = m_destinyEventQueue->GetItem(i);
             if (rep == nullptr)
                 continue;
 
-            PyTuple* t = rep->AsTuple();
-            if (t == nullptr)
-                continue;
-
-            // IMPORTANT: must be "OnMultiEvent" and should be sent to clientID
-            SendNotification("OnMultiEvent", "clientID", &t);
+            // The queue contains event tuples like: ("OnSpecialFX", argsTuple)
+            // OnMultiEvent expects a LIST of these tuples.
+            PyIncRef(rep);
+            evList->AddItem(rep);
         }
+
+        PyTuple* t = new PyTuple(1);
+        t->SetItem(0, evList);  // tuple's only element is the events list
+
+        // IMPORTANT: must be "OnMultiEvent" and should be sent to clientID
+        SendNotification("OnMultiEvent", "clientID", &t);
+        PySafeDecRef(t);
 
         // Clear after sending.
         m_destinyEventQueue->clear();
     }
 
+    // 3) Updates only: DoDestinyUpdateMain_2 carries updates list (no events)
     if (updateCount > 0)
     {
         DoDestinyUpdateMain_2 dum;

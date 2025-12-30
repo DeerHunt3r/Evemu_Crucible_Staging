@@ -393,7 +393,7 @@ void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/
             throw CustomError("Attacking Customs Offices isn't implemented at this time.");
         }
 
-        // Wreck safety – this fork doesn't have all the charge/weapon flags wired yet,
+        // Wreck safety ? this fork doesn't have all the charge/weapon flags wired yet,
         // so we conservatively just block attacking wrecks.
         if (m_targetSE->IsWreckSE()) {
             Clear();
@@ -453,7 +453,7 @@ void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/
 
     SetModuleState(Module::State::Activated);
 
-    // Group-specific extras – trimmed to only use enums / methods that exist
+    // Group-specific extras ? trimmed to only use enums / methods that exist
     switch (groupID()) {
         case EVEDB::invGroups::Warp_Scrambler: {
             // In your current DestinyManager there is no ScrambleMe(),
@@ -834,12 +834,12 @@ void ActiveModule::DeactivateCycle(bool abort/*false*/)
              "%s - DeactivateCycle() - Salvager finished on target %s (ID %u).",
              m_modRef->name(), m_targetSE->GetName(), m_targetSE->GetID());
 
-        // Remove this target from our ship’s target manager
+        // Remove this target from our ship?s target manager
         if (m_targMgr != nullptr) {
             m_targMgr->RemoveTarget(m_targetSE);
         }
 
-        // Let the target’s target manager know this module is no longer tracking it
+        // Let the target?s target manager know this module is no longer tracking it
         if (m_targetSE->TargetMgr() != nullptr) {
             m_targetSE->TargetMgr()->RemoveTargetModule(this);
             // NOTE:
@@ -900,7 +900,7 @@ void ActiveModule::ProcessActiveCycle()
         return;
     }
 
-    // Normal path: run the module’s work for this tick and schedule the next cycle.
+    // Normal path: run the module?s work for this tick and schedule the next cycle.
     uint32 nextCycle = DoCycle();
 
     if (nextCycle == 0) {
@@ -1297,24 +1297,129 @@ bool ActiveModule::CanActivate() {
     return true;
 }
 
-void ActiveModule::ShowEffect(bool active/*false*/, bool abort/*false*/)
+void ActiveModule::ShowEffect(bool active, bool abort)
 {
-    // TEMPORARY SAFETY STUB:
-    // We disable all FX building / sending to avoid crashes in the FX pipeline.
-    // Modules will still function mechanically (damage, mining, etc.), but no
-    // visual or special effect packets will be sent to the client for now.
+    // Guard: these are RefPtr<> (truthy when set), not raw pointers.
+    if (!m_shipRef || !m_modRef)
+        return;
 
-    _log(EFFECTS__TRACE,
-         "ShowEffect(%s, %s) suppressed for %s(%u); FX temporarily disabled.",
-         active ? "active" : "inactive",
-         abort ? "abort" : "no-abort",
-         (m_modRef ? m_modRef->name() : "(null)"),
-         (m_modRef ? m_modRef->itemID() : 0U));
+    Client* const pClient = m_shipRef->GetPilot();
+    if (pClient == nullptr)
+        return;
 
-    // Do nothing else. No GenericEffect, ShipEffect, GUID, or QueueSpecialFX.
-    return;
+    const uint32 shipID   = m_shipRef->itemID();
+    const uint32 modID    = m_modRef->itemID();
+    const uint32 typeID   = m_modRef->typeID();
+    const uint32 targetID = m_targetID;
+    const uint32 effectID = m_effectID;
+
+    // Resolve the visual GUID from the effect data table (no GetEffectGUID helper here).
+    std::string guid;
+    if (effectID != 0)
+        guid = sFxDataMgr.GetEffectGuid(effectID);
+
+    // Fallback: keep guid non-empty for older content if table lookup fails.
+    if (guid.empty())
+        guid = "effects.Generic";
+
+    // ---------------------------
+    // Dogma ring + target icon path
+    // ---------------------------
+    // Crucible expects OnMultiEvent containing ("OnGodmaShipEffect", ....).
+    {
+        Notify_OnGodmaShipEffect shipEff;
+
+        shipEff.itemID   = modID;
+        shipEff.effectID = effectID;
+
+        // timeNow and startTime must be "now-ish" (filetime). 0 causes the BlueOS "Time diff too big" crash.
+        shipEff.timeNow   = GetFileTimeNow();
+        shipEff.startTime = shipEff.timeNow;
+
+        // IMPORTANT FIX:
+        // - start indicates whether ramps should start (1 on activation, 0 on deactivation)
+        // - active indicates whether the module is active (1 when running, 0 when stopped/aborted)
+        shipEff.start  = active ? 1 : 0;
+        shipEff.active = (active && !abort) ? 1 : 0;
+
+        GodmaEnvironment ge;
+        ge.selfID   = modID;                // module item
+        ge.charID   = m_shipRef->ownerID(); // owning character
+        ge.shipID   = shipID;               // ship item
+
+        // IMPORTANT FIX:
+        // Always include the target when we have one. This is what drives "module icon assigned to target".
+        ge.target   = (targetID != 0) ? (PyRep*)new PyInt(targetID) : PyStatic.NewNone();
+
+        ge.subLoc   = PyStatic.NewNone();
+        ge.area     = PyStatic.NewNone();
+        ge.effectID = effectID;
+
+        shipEff.environment = ge.Encode();
+
+        // duration is a "real" in DogmaIM.xmlp.
+        // Keep it simple and safe: if active, use the dogma duration attribute if present; else 0.
+        // Many modules have AttrDuration in milliseconds.
+        shipEff.duration = 0.0;
+        if (active)
+        {
+            // If your attribute system returns ms, keep ms (client UI expects same units it normally gets).
+            shipEff.duration = (double)m_modRef->GetAttribute(AttrDuration).get_float();
+        }
+
+        shipEff.repeat     = 0;
+        shipEff.randomSeed = 0;
+        shipEff.error      = PyStatic.NewNone();
+
+        PyTuple* const enc = shipEff.Encode();
+        if (enc != nullptr)
+        {
+            Notify_OnMultiEvent multi;
+            multi.events = new PyList();
+            multi.events->AddItem(enc);
+
+            PyTuple* tmp = multi.Encode();
+            pClient->SendNotification("OnMultiEvent", "clientID", &tmp);
+        }
+    }
+
+    // ---------------------------
+    // Destiny visual effect path (beams / shots)
+    // ---------------------------
+    {
+        // Keep existing semantics you’ve been using:
+        // - active start: duration -1 for persistent (e.g. mining beam)
+        // - stop: duration 0
+        const int32  duration    = active ? -1 : 0;
+        const uint32 repeat      = 0;
+        const int32  graphicInfo = 0;
+
+        ShipSE* const shipSE = pClient->GetShipSE();
+        if (shipSE != nullptr)
+        {
+            DestinyManager* const pDM = shipSE->DestinyMgr();
+            if (pDM != nullptr)
+            {
+                pDM->SendSpecialEffect(
+                    shipID, modID, typeID, targetID, 0, guid,
+                    false,
+                    active,                 // start
+                    (active && !abort),     // isActive
+                    duration,
+                    repeat,
+                    graphicInfo);
+            }
+        }
+    }
+
+    _log(SE__TRACE,
+        "ActiveModule::ShowEffect(): ship=%u mod=%u effectID=%u target=%u start=%u active=%u abort=%u guid='%s'",
+        shipID, modID, effectID, targetID,
+        active ? 1 : 0,
+        (active && !abort) ? 1 : 0,
+        abort ? 1 : 0,
+        guid.c_str());
 }
-
 
 /*
                   [PyTuple 12 items]
@@ -1446,3 +1551,5 @@ void ActiveModule::LaunchSnowBall()
 {
     // not used yet
 }
+
+

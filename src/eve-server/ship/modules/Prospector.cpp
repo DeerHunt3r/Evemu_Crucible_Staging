@@ -216,13 +216,13 @@ void Prospector::CheckSuccess()
     // 3) Final chance is base + bonus, treated as a percentage.
     int chance = baseDifficulty + bonus;
 
-    // Clamp to 0–100% so bad data can't give negative or >100%.
+    // Clamp to 0?100% so bad data can't give negative or >100%.
     if (chance < 0)
         chance = 0;
     else if (chance > 100)
         chance = 100;
 
-    // 4) Roll 0–99 so 'chance' behaves like a straight percentage.
+    // 4) Roll 0?99 so 'chance' behaves like a straight percentage.
     const uint8 roll = MakeRandomInt(0, 99);
     m_success = (roll < chance);
 

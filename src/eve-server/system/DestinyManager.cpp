@@ -3077,97 +3077,109 @@ void DestinyManager::SendCloakFx(bool apply/*false*/, bool module/*false*/) cons
     SendSingleDestinyUpdate(&up);   // consumed
 }
 
-// def OnSpecialFX(shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid, isOffensive, start, active, duration = -1, repeat = None, startTime = None, graphicInfo = None):
 
-void DestinyManager::SendSpecialEffect10(
-    uint32 entityID,
-    uint32 targetID,
-    std::string guid,
-    bool isOffensive,
-    bool start,
-    bool isActive
-) const
+// def OnSpecialFX(shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid, isOffensive,
+//                 start, active, duration = -1, repeat = None, startTime = None, graphicInfo = None):
+void DestinyManager::SendSpecialEffect10(uint32 entityID, uint32 targetID, std::string guid,
+                                        bool isOffensive, bool start, bool active) const
 {
-    // FX logging for the simplified SpecialFX10 packet
-    if (is_log_enabled(DESTINY__TRACE)) {
-        _log(
-            DESTINY__TRACE,
-            "SendSpecialEffect10: entityID=%u targetID=%u guid='%s' offensive=%s start=%s active=%s",
-            entityID,
-            targetID,
-            guid.c_str(),
-            isOffensive ? "true" : "false",
-            start       ? "true" : "false",
-            isActive    ? "true" : "false"
-        );
-    }
+    // Crucible: FX must be delivered as an OnMultiEvent destiny EVENT ("OnSpecialFX").
+    // IMPORTANT: Event entries must be FLAT:
+    // ("OnSpecialFX", shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid,
+    //  isOffensive, start, active, duration, repeat, startTime, graphicInfo)
 
-    OnSpecialFX10 effect;
-    effect.entityID    = entityID;
-    effect.targetID    = targetID;
-    effect.guid        = guid;
-    effect.area        = new PyList();   // unused on the client, but packet expects it
-    effect.isOffensive = isOffensive;
-    effect.start       = start;
-    effect.active      = isActive;
+    if (mySE == nullptr)
+        return;
 
-    PyTuple* up = effect.Encode();
-    SendSingleDestinyUpdate(&up);   // consumed
+    const int32 duration = active ? -1 : 0;
+
+    // 15-tuple: [0]="OnSpecialFX", [1..14]=args
+    PyTuple* ev = new PyTuple(15);
+    ev->SetItem(0,  new PyString("OnSpecialFX"));
+    ev->SetItem(1,  new PyInt(entityID));        // shipID
+    ev->SetItem(2,  new PyInt(0));               // moduleID (unknown in SpecialEffect10)
+    ev->SetItem(3,  new PyInt(0));               // moduleTypeID
+    ev->SetItem(4,  new PyInt(targetID));        // targetID
+    ev->SetItem(5,  new PyInt(0));               // otherTypeID (charge type)
+    ev->SetItem(6,  new PyList());               // area (unused)
+    ev->SetItem(7,  new PyString(guid));         // guid
+    ev->SetItem(8,  new PyBool(isOffensive));    // isOffensive
+    ev->SetItem(9,  new PyBool(start));          // start
+    ev->SetItem(10, new PyBool(active));         // active
+    ev->SetItem(11, new PyInt(duration));        // duration
+    ev->SetItem(12, PyStatic.NewNone());         // repeat = None
+    ev->SetItem(13, PyStatic.NewNone());         // startTime = None
+    ev->SetItem(14, PyStatic.NewNone());         // graphicInfo = None
+
+    if (is_log_enabled(EFFECTS__TRACE))
+        _log(EFFECTS__TRACE,
+             "SendSpecialEffect10(EVENT FLAT): ship=%u target=%u guid='%s' offensive=%s start=%s active=%s duration=%i",
+             entityID, targetID, guid.c_str(),
+             isOffensive ? "true" : "false",
+             start ? "true" : "false",
+             active ? "true" : "false",
+             duration);
+
+    SendSingleDestinyEvent(&ev, false);
 }
 
-void DestinyManager::SendSpecialEffect(
-    uint32 entityID,
-    uint32 moduleID,
-    uint32 moduleTypeID,
-    uint32 targetID,
-    uint32 chargeTypeID,
-    std::string guid,
-    bool isOffensive,
-    bool start,
-    bool isActive,
-    int32 duration,
-    uint32 repeat,
-    int32 graphicInfo/*0*/
-) const
+void DestinyManager::SendSpecialEffect(uint32 entityID, uint32 moduleID, uint32 moduleTypeID,
+                                      uint32 targetID, uint32 chargeTypeID, std::string guid,
+                                      bool isOffensive, bool start, bool isActive,
+                                      int32 duration, uint32 /*repeat*/, int32 graphicInfo /*0*/) const
 {
-    // Log every attempt (guarded by DESTINY__TRACE)
-    if (is_log_enabled(DESTINY__TRACE)) {
-        _log(DESTINY__TRACE,
-            "SendSpecialEffect: entity=%u module=%u(type=%u) target=%u chargeType=%u guid='%s' offensive=%s start=%s active=%s duration=%i repeat=%u graphicInfo=%i",
-            entityID, moduleID, moduleTypeID, targetID, chargeTypeID, guid.c_str(),
-            (isOffensive ? "true" : "false"),
-            (start ? "true" : "false"),
-            (isActive ? "true" : "false"),
-            duration, repeat, graphicInfo
-        );
+    // Crucible: FX must be delivered as an OnMultiEvent destiny EVENT ("OnSpecialFX").
+    // IMPORTANT: Event entries must be FLAT (NOT ("OnSpecialFX", (args...)) ).
+    // ("OnSpecialFX", shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid,
+    //  isOffensive, start, active, duration, repeat, startTime, graphicInfo)
+
+    if (mySE == nullptr)
+        return;
+
+    // CHANGED: Stop events must always be inactive and have duration 0.
+    // Crucible client may send/expect start=true + active=false (ramp start), so do NOT
+    // zero duration just because active is false.
+    if (!start) {
+        isActive = false;   // CHANGED
+        duration = 0;       // CHANGED
     }
 
-    OnSpecialFX14 effect;
-    effect.entityID      = entityID;
-    effect.moduleID      = moduleID;
-    effect.moduleTypeID  = moduleTypeID;
+    // 15-tuple: [0]="OnSpecialFX", [1..14]=args
+    PyTuple* ev = new PyTuple(15);
+    ev->SetItem(0,  new PyString("OnSpecialFX"));
+    ev->SetItem(1,  new PyInt(entityID));          // shipID
+    ev->SetItem(2,  new PyInt(moduleID));          // moduleID
+    ev->SetItem(3,  new PyInt(moduleTypeID));      // moduleTypeID
+    ev->SetItem(4,  new PyInt(targetID));          // targetID
+    ev->SetItem(5,  new PyInt(chargeTypeID));      // otherTypeID (charge/crystal/ammo)
+    ev->SetItem(6,  new PyList());                 // area (unused for modules)
+    ev->SetItem(7,  new PyString(guid));           // guid
+    ev->SetItem(8,  new PyBool(isOffensive));      // isOffensive
+    ev->SetItem(9,  new PyBool(start));            // start
+    ev->SetItem(10, new PyBool(isActive));         // active
+    ev->SetItem(11, new PyInt(duration));          // duration
 
-    // Optional fields: send None when zero
-    effect.targetID      = (targetID == 0 ? PyStatic.NewNone() : new PyInt(targetID));
-    effect.chargeTypeID  = (chargeTypeID == 0 ? PyStatic.NewNone() : new PyInt(chargeTypeID));
+    // repeat/startTime/graphicInfo: Crucible defaults are None unless explicitly set.
+    ev->SetItem(12, PyStatic.NewNone());           // repeat = None
+    ev->SetItem(13, PyStatic.NewNone());           // startTime = None
 
-    effect.guid          = guid;
-    effect.area          = new PyList(); // client ignores this for this packet
-    effect.isOffensive   = isOffensive;
-    effect.start         = start;
-    effect.active        = isActive;
-    effect.duration      = duration;
-    effect.repeat        = repeat;
+    if (graphicInfo != 0)
+        ev->SetItem(14, new PyInt(graphicInfo));
+    else
+        ev->SetItem(14, PyStatic.NewNone());       // graphicInfo = None
 
-    // In your build this field is a PyRep*
-    effect.graphicInfo   = (graphicInfo == 0 ? PyStatic.NewNone() : new PyInt(graphicInfo));
+    if (is_log_enabled(EFFECTS__TRACE))
+        _log(EFFECTS__TRACE,
+             "SendSpecialEffect(EVENT FLAT): entity=%u module=%u(type=%u) target=%u chargeType=%u guid='%s' offensive=%s start=%s active=%s duration=%i graphicInfo=%i",
+             entityID, moduleID, moduleTypeID, targetID, chargeTypeID, guid.c_str(),
+             isOffensive ? "true" : "false",
+             start ? "true" : "false",
+             isActive ? "true" : "false",
+             duration,
+             graphicInfo);
 
-    PyTuple* up = effect.Encode();
-    SendSingleDestinyUpdate(&up);
+    SendSingleDestinyEvent(&ev, false);
 }
-
-
-
 
 
 /*
