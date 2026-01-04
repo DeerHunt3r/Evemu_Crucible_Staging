@@ -1,0 +1,719 @@
+Searching in: .
+Output: turret_target_loss_audit.txt
+============================================================
+
+---- MATCHES FOR: RemoveTarget ----
+./src/eve-server/dogmaim/DogmaIMService.cpp:100:    this->Add("RemoveTarget", &DogmaIMBound::RemoveTarget);
+./src/eve-server/dogmaim/DogmaIMService.cpp:448:PyResult DogmaIMBound::RemoveTarget(PyCallArgs& call, PyInt* targetID) {
+./src/eve-server/dogmaim/DogmaIMService.cpp:465:            _log(TARGET__MESSAGE, "Handle_RemoveTarget() - Removed %s(%u) - Range to Target: %.2f meters.", \
+./src/eve-server/dogmaim/DogmaIMService.cpp:470:    pClient->GetShipSE()->RemoveTarget(pTSE);
+./src/eve-server/dogmaim/DogmaIMService.h:90:    PyResult RemoveTarget(PyCallArgs& call, PyInt* targetID);
+./src/eve-server/dogmaim/DogmaIMService.h:99:     * self.GetDogmaLM().RemoveTargetOBO(sid, tid)  (structureID, targetID)
+./src/eve-server/ship/Ship.h:337:    void RemoveTarget(SystemEntity* pSE);
+./src/eve-server/ship/Ship.cpp:2584:void ShipSE::RemoveTarget(SystemEntity* pSE) {
+./src/eve-server/ship/Ship.cpp:2586:    m_shipRef->GetModuleManager()->RemoveTarget(pSE);
+./src/eve-server/ship/modules/ModuleManager.cpp:224:void ModuleManager::RemoveTarget(SystemEntity* pSE) {
+./src/eve-server/ship/modules/ModuleManager.cpp:227:            cur.second->RemoveTarget(pSE);
+./src/eve-server/ship/modules/ModuleManager.cpp:231:            cur.second->RemoveTarget(pSE);
+./src/eve-server/ship/modules/MiningLaser.cpp:276:        RemoveTarget(m_targetSE);
+./src/eve-server/ship/modules/ModuleManager.h:35:    void RemoveTarget(SystemEntity* pSE);
+./src/eve-server/ship/modules/GenericModule.h:149:    virtual void RemoveTarget(SystemEntity* pSE)        { /* do nothing here */ }
+./src/eve-server/ship/modules/ActiveModule.h:46:    virtual void        RemoveTarget(SystemEntity* pSE);
+./src/eve-server/ship/modules/ActiveModule.cpp:249:            m_targetSE->TargetMgr()->RemoveTargetModule(this);
+./src/eve-server/ship/modules/ActiveModule.cpp:319:void ActiveModule::RemoveTarget(SystemEntity* pSE) {
+./src/eve-server/ship/modules/ActiveModule.cpp:321:        _log(MODULE__TRACE, "ActiveModule::RemoveTarget called on %s on %s to remove %s", m_modRef->name(), m_shipRef->name(), pSE->GetName());
+./src/eve-server/ship/modules/ActiveModule.cpp:839:            m_targMgr->RemoveTarget(m_targetSE);
+./src/eve-server/ship/modules/ActiveModule.cpp:844:            m_targetSE->TargetMgr()->RemoveTargetModule(this);
+./src/eve-server/system/TargetManager.new:558:void TargetManager::RemoveTargetModule(ActiveModule* pMod)
+./src/eve-server/system/TargetManager.h:101:    void                RemoveTarget(SystemEntity* tSE);
+./src/eve-server/system/TargetManager.h:146:    void                RemoveTargetModule(ActiveModule* pMod);
+./src/eve-server/system/TargetManager.cpp:240:void TargetManager::RemoveTarget(SystemEntity* tSE) {
+./src/eve-server/system/TargetManager.cpp:251:    _log(TARGET__TRACE, "RemoveTarget:  %s(%u) has removed target %s(%u).", \
+./src/eve-server/system/TargetManager.cpp:555:void TargetManager::RemoveTargetModule(ActiveModule* pMod)
+
+---- MATCHES FOR: OnTargetLost ----
+./src/eve-server/system/TargetManager.new:100: *            self.OnTargetLost(tid, reason)
+
+---- MATCHES FOR: TargetLost ----
+./src/eve-server/npc/Drone.cpp:239:void DroneSE::TargetLost(SystemEntity *who) {
+./src/eve-server/npc/Drone.cpp:240:    m_AI->TargetLost(who);
+./src/eve-server/npc/Sentry.h:34:    virtual void TargetLost(SystemEntity* who);
+./src/eve-server/npc/NPCAI.h:65:    void TargetLost(SystemEntity* pTargSE);
+./src/eve-server/npc/NPCAI.cpp:718:void NPCAIMgr::TargetLost(SystemEntity* pSE) {
+./src/eve-server/npc/SentryAI.h:35:    void TargetLost(SystemEntity *by_who);
+./src/eve-server/npc/NPC.cpp:115:void NPC::TargetLost(SystemEntity *who) {
+./src/eve-server/npc/NPC.cpp:116:    m_AI->TargetLost(who);
+./src/eve-server/npc/NPC.h:55:    virtual void TargetLost(SystemEntity* who);
+./src/eve-server/npc/Drone.h:69:    virtual void TargetLost(SystemEntity *who);
+./src/eve-server/npc/DroneAI.cpp:266:void DroneAIMgr::TargetLost(SystemEntity* pTarget) {
+./src/eve-server/npc/DroneAI.h:53:    void TargetLost(SystemEntity *by_who);
+./src/eve-server/npc/SentryAI.cpp:312:void SentryAI::TargetLost(SystemEntity* pTarget) {
+./src/eve-server/npc/Sentry.cpp:74:void Sentry::TargetLost(SystemEntity *who) {
+./src/eve-server/npc/Sentry.cpp:75:    m_AI->TargetLost(who);
+./src/eve-server/system/TargetManager.new:100: *            self.OnTargetLost(tid, reason)
+./src/eve-server/system/TargetManager.new:203:                mySE->GetNPCSE()->TargetLost(tSE);
+./src/eve-server/system/TargetManager.h:92:    void                TargetLost(SystemEntity *tSE);
+./src/eve-server/system/TargetManager.h:219:{'messageKey': 'TargetLost', 'dataID': 17881497, 'suppressable': False, 'bodyID': 258795, 'messageType': 'notify', 'urlAudio': 'wise:/msg_TargetLost_play', 'urlIcon': '', 'titleID': None, 'messageID': 1624}
+./src/eve-server/system/TargetManager.h:220:{'messageKey': 'TargetLostNotWithinRange', 'dataID': 17881663, 'suppressable': False, 'bodyID': 258854, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1625}
+./src/eve-server/system/TargetManager.h:221:u'TargetLostNotWithinRangeBody'}(u'The {[item]targetGroupID.name} is too far away, you need to be within {[numeric]desiredRange} meters of it but are actually {[numeric]actualRange} meters away.', None, {u'{[numeric]desiredRange}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'desiredRange'}, u'{[numeric]actualRange}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'actualRange'}, u'{[item]targetGroupID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'targetGroupID'}})
+./src/eve-server/system/TargetManager.h:245:{'FullPath': u'UI/Messages', 'messageID': 258795, 'label': u'TargetLostBody'}(u'Target is lost', None, None)
+./src/eve-server/system/TargetManager.h:248:{'FullPath': u'UI/Messages', 'messageID': 258854, 'label': u'TargetLostNotWithinRangeBody'}(u'The {[item]targetGroupID.name} is too far away, you need to be within {[numeric]desiredRange} meters of it but are actually {[numeric]actualRange} meters away.', None, {u'{[numeric]desiredRange}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'desiredRange'}, u'{[numeric]actualRange}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'actualRange'}, u'{[item]targetGroupID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'targetGroupID'}})
+./src/eve-server/system/TargetManager.cpp:259:    TargetLost(tSE);
+./src/eve-server/system/TargetManager.cpp:327:            cur->TargetMgr()->TargetLost(mySE);
+./src/eve-server/system/TargetManager.cpp:330:void TargetManager::TargetLost(SystemEntity *tSE) {
+./src/eve-server/system/TargetManager.cpp:350:        mySE->GetNPCSE()->TargetLost(tSE);
+
+---- MATCHES FOR: ClearTarget ----
+./src/eve-server/dogmaim/DogmaIMService.cpp:101:    this->Add("ClearTargets", &DogmaIMBound::ClearTargets);
+./src/eve-server/dogmaim/DogmaIMService.cpp:112:PyResult DogmaIMBound::ClearTargets(PyCallArgs& call) {
+./src/eve-server/dogmaim/DogmaIMService.cpp:113:    call.client->GetShipSE()->TargetMgr()->ClearTargets();
+./src/eve-server/dogmaim/DogmaIMService.h:91:    PyResult ClearTargets(PyCallArgs& call);
+./src/eve-server/ship/Ship.h:153:    void ClearTargetRef()                               { m_targetRef = InventoryItemRef(); }
+./src/eve-server/ship/Ship.cpp:2588:    m_targMgr->ClearTarget(pSE);
+./src/eve-server/ship/modules/ActiveModule.cpp:266:    m_shipRef->ClearTargetRef();
+./src/eve-server/npc/NPCAI.h:93:    void ClearTarget(SystemEntity* pTargSE);
+./src/eve-server/npc/NPCAI.cpp:397:                    ClearTarget(pSE);
+./src/eve-server/npc/NPCAI.cpp:619:            ClearTarget(pSE);
+./src/eve-server/npc/NPCAI.cpp:752:            ClearTarget(pSE);
+./src/eve-server/npc/NPCAI.cpp:759:            ClearTarget(pSE);
+./src/eve-server/npc/NPCAI.cpp:767:            ClearTarget(pSE);
+./src/eve-server/npc/NPCAI.cpp:775:void NPCAIMgr::ClearTarget(SystemEntity* pSE) {
+./src/eve-server/npc/NPCAI.cpp:776:    m_npc->TargetMgr()->ClearTarget(pSE);
+./src/eve-server/npc/SentryAI.h:37:    void ClearTargets();
+./src/eve-server/npc/SentryAI.h:54:    void ClearTarget(SystemEntity* pTarget);
+./src/eve-server/npc/SentryAI.cpp:241:            ClearTarget(pTarget);
+./src/eve-server/npc/SentryAI.cpp:254:void SentryAI::ClearTarget(SystemEntity* pTarget) {
+./src/eve-server/npc/SentryAI.cpp:255:    m_npc->TargetMgr()->ClearTarget(pTarget);
+./src/eve-server/npc/SentryAI.cpp:334:            ClearTarget(pTarget);
+./src/eve-server/npc/SentryAI.cpp:340:            ClearTarget(pTarget);
+./src/eve-server/npc/SentryAI.cpp:347:            ClearTarget(pTarget);
+./src/eve-server/system/TargetManager.new:215:            ClearTargets(msg);
+./src/eve-server/system/TargetManager.new:298:void TargetManager::ClearTargets(uint8 msg/*TargMgr::Msg::NoMsg*/) {
+./src/eve-server/system/TargetManager.new:312:    _log(TARGET__INFO, "ClearTarget() - %s(%u) has cleared all targets.  %u left", mySE->GetName(), mySE->GetID(), m_targets.size());
+./src/eve-server/npc/DroneAI.h:55:    void ClearTargets();
+./src/eve-server/npc/DroneAI.h:67:    void ClearTarget(SystemEntity* pTarget);
+./src/eve-server/system/TargetManager.h:93:    void                ClearTarget(SystemEntity *tSE);
+./src/eve-server/system/TargetManager.h:97:    void                ClearTargets(bool notify=true);
+./src/eve-server/system/TargetManager.h:120:    //void                ClearTargets(uint8 msg=TargMgr::Msg::NoMsg);
+./src/eve-server/npc/DroneAI.cpp:89:                m_pDrone->TargetMgr()->ClearTarget(pTarget);
+./src/eve-server/npc/DroneAI.cpp:184:            ClearTarget(pSE);
+./src/eve-server/npc/DroneAI.cpp:202:void DroneAIMgr::ClearTargets() {
+./src/eve-server/npc/DroneAI.cpp:203:    m_pDrone->TargetMgr()->ClearTargets();
+./src/eve-server/npc/DroneAI.cpp:295:            ClearTarget(pSE);
+./src/eve-server/npc/DroneAI.cpp:302:            ClearTarget(pSE);
+./src/eve-server/npc/DroneAI.cpp:309:            ClearTarget(pSE);
+./src/eve-server/npc/DroneAI.cpp:318:void DroneAIMgr::ClearTarget(SystemEntity* pSE) {
+./src/eve-server/npc/DroneAI.cpp:319:    m_pDrone->TargetMgr()->ClearTarget(pSE);
+./src/eve-server/system/TargetManager.cpp:255:void TargetManager::ClearTarget(SystemEntity *tSE) {
+./src/eve-server/system/TargetManager.cpp:265:    _log(TARGET__TRACE, "ClearTarget:  %s(%u) has cleared target %s(%u).", \
+./src/eve-server/system/TargetManager.cpp:285:    ClearTargets(notify);
+./src/eve-server/system/TargetManager.cpp:292:void TargetManager::ClearTargets(bool notify/*true*/) {
+./src/eve-server/system/TargetManager.cpp:300:        _log(TARGET__TRACE, "ClearTargets() - %s(%u) has cleared target %s(%u).",
+./src/eve-server/system/DestinyManager.cpp:1882:            //mySE->TargetMgr()->ClearTarget(m_targetEntity.second);
+./src/eve-server/system/DestinyManager.cpp:1888:        //mySE->TargetMgr()->ClearTarget(m_targetEntity.second);
+
+---- MATCHES FOR: ClearTargets ----
+./src/eve-server/dogmaim/DogmaIMService.cpp:101:    this->Add("ClearTargets", &DogmaIMBound::ClearTargets);
+./src/eve-server/dogmaim/DogmaIMService.cpp:112:PyResult DogmaIMBound::ClearTargets(PyCallArgs& call) {
+./src/eve-server/dogmaim/DogmaIMService.cpp:113:    call.client->GetShipSE()->TargetMgr()->ClearTargets();
+./src/eve-server/dogmaim/DogmaIMService.h:91:    PyResult ClearTargets(PyCallArgs& call);
+./src/eve-server/npc/SentryAI.h:37:    void ClearTargets();
+./src/eve-server/npc/DroneAI.cpp:202:void DroneAIMgr::ClearTargets() {
+./src/eve-server/npc/DroneAI.cpp:203:    m_pDrone->TargetMgr()->ClearTargets();
+./src/eve-server/npc/DroneAI.h:55:    void ClearTargets();
+./src/eve-server/system/TargetManager.cpp:285:    ClearTargets(notify);
+./src/eve-server/system/TargetManager.cpp:292:void TargetManager::ClearTargets(bool notify/*true*/) {
+./src/eve-server/system/TargetManager.cpp:300:        _log(TARGET__TRACE, "ClearTargets() - %s(%u) has cleared target %s(%u).",
+./src/eve-server/system/TargetManager.h:97:    void                ClearTargets(bool notify=true);
+./src/eve-server/system/TargetManager.h:120:    //void                ClearTargets(uint8 msg=TargMgr::Msg::NoMsg);
+./src/eve-server/system/TargetManager.new:215:            ClearTargets(msg);
+./src/eve-server/system/TargetManager.new:298:void TargetManager::ClearTargets(uint8 msg/*TargMgr::Msg::NoMsg*/) {
+
+---- MATCHES FOR: TargetDestroyed ----
+./src/eve-server/ship/modules/ActiveModule.cpp:518:    if (effect.compare("TargetDestroyed") == 0) {
+./src/eve-server/ship/modules/ActiveModule.cpp:521:            GetProspectModule()->TargetDestroyed();
+./src/eve-server/ship/modules/Prospector.h:36:    void TargetDestroyed()                              { m_success = false; }
+./src/eve-server/system/TargetManager.cpp:567:    std::string effect = "TargetDestroyed";
+./src/eve-server/system/TargetManager.cpp:607:                module->GetProspectModule()->TargetDestroyed();
+./src/eve-server/system/TargetManager.new:575:    std::string effect = "TargetDestroyed";
+
+---- MATCHES FOR: RemoveBall ----
+./src/eve-common/packets/Destiny.xmlp:14:RemoveBalls
+./src/eve-common/packets/Destiny.xmlp:15:RemoveBall
+./src/eve-common/packets/Destiny.xmlp:23:RemoveBall
+./src/eve-common/packets/Destiny.xmlp:125:        <!-- at this point, it's tuple for RemoveBall or list for AddBall
+./src/eve-common/packets/Destiny.xmlp:339:  <elementDef name="RemoveBallFromBP">
+./src/eve-common/packets/Destiny.xmlp:342:      <stringInline value="RemoveBall" />
+./src/eve-common/packets/Destiny.xmlp:350:  <elementDef name="RemoveBallsFromBP">
+./src/eve-common/packets/Destiny.xmlp:353:      <stringInline value="RemoveBalls" />
+./src/eve-common/marshal/EVEMarshalStringTable.cpp:151:    "RemoveBalls",
+./src/eve-server/system/SystemBubble.cpp:428:        RemoveBalls(pSE);
+./src/eve-server/system/SystemBubble.cpp:433:        RemoveBall(pSE);
+./src/eve-server/system/SystemBubble.cpp:462:    RemoveBallExclusive(pSE);
+./src/eve-server/system/SystemBubble.cpp:854:/*  NOTE   lil insight into clients code for RemoveBall
+./src/eve-server/system/SystemBubble.cpp:855: * RemoveBall is function to remove all data associated with a particular ballID.
+./src/eve-server/system/SystemBubble.cpp:858: * RemoveBalls is called when there is an associated TerminalExplosion with that ballID
+./src/eve-server/system/SystemBubble.cpp:860: *          if funcName == 'RemoveBalls':
+./src/eve-server/system/SystemBubble.cpp:863: * RemoveBalls is then called on the entire group, and will call RemoveBall(ballID, terminal) on each ball.
+./src/eve-server/system/SystemBubble.cpp:867: *      NOTE  RemoveBall doesnt not work as i thought it should....doesnt trigger explosion.
+./src/eve-server/system/SystemBubble.cpp:870:void SystemBubble::RemoveBall(SystemEntity *about_who) {
+./src/eve-server/system/SystemBubble.cpp:871:    // RemoveBallFromBP removeball;
+./src/eve-server/system/SystemBubble.cpp:873:    // using RemoveBalls instead of RemoveBall because client
+./src/eve-server/system/SystemBubble.cpp:874:    // seems not to trigger explosion on RemoveBall
+./src/eve-server/system/SystemBubble.cpp:877:    RemoveBallsFromBP removeball;
+./src/eve-server/system/SystemBubble.cpp:880:    _log(DESTINY__MESSAGE, "SystemBubble::RemoveBall()");
+./src/eve-server/system/SystemBubble.cpp:885:    BubblecastDestinyUpdate(&tmp, "RemoveBall");
+./src/eve-server/system/SystemBubble.cpp:890:void SystemBubble::RemoveBallExclusive(SystemEntity *about_who) {
+./src/eve-server/system/SystemBubble.cpp:891:    RemoveBallFromBP removeball;
+./src/eve-server/system/SystemBubble.cpp:893:    // RemoveBalls removeball;
+./src/eve-server/system/SystemBubble.cpp:896:    _log(DESTINY__MESSAGE, "SystemBubble::RemoveBallExclusive()");
+./src/eve-server/system/SystemBubble.cpp:901:    BubblecastDestinyUpdateExclusive(&tmp, "RemoveBall", about_who);
+./src/eve-server/system/SystemBubble.cpp:905:void SystemBubble::RemoveBalls(SystemEntity *to_who) {
+./src/eve-server/system/SystemBubble.cpp:923:    RemoveBallsFromBP remove_balls;
+./src/eve-server/system/SystemBubble.cpp:933:    _log(DESTINY__MESSAGE, "SystemBubble::RemoveBalls() - sending to %s", pClient->GetName());
+./src/eve-server/system/SystemBubble.h:181:    void RemoveBall(SystemEntity* about_who);
+./src/eve-server/system/SystemBubble.h:182:    void RemoveBalls(SystemEntity* to_who);
+./src/eve-server/system/SystemBubble.h:184:    void RemoveBallExclusive(SystemEntity* about_who);
+
+---- MATCHES FOR: Killed ----
+./src/eve-server/npc/Drone.cpp:371:void DroneSE::Killed(Damage &damage) {
+./src/eve-server/npc/Drone.cpp:385:            sLog.Error("DroneSE::Killed()", "killer == IsDrone and pPlayer == nullptr");
+./src/eve-server/npc/Drone.cpp:402:        sLog.Error("DroneSE::Killed()", "Wreck Position is NaN");
+./src/eve-server/npc/Drone.cpp:413:        sLog.Error("DroneSE::Killed()", "Creating Wreck Item Failed for %s of type %u", wreck_name.c_str(), wreckTypeID);
+./src/eve-server/npc/Drone.cpp:418:        _log(PHYSICS__TRACE, "DroneSE::Killed() - Drone %s(%u) Position: %.2f,%.2f,%.2f.  Wreck %s(%u) Position: %.2f,%.2f,%.2f.", \
+./src/eve-server/npc/Drone.cpp:434:        sLog.Error("DroneSE::Killed()", "Spawning Wreck Failed for typeID %u", wreckTypeID);
+./src/eve-server/npc/Sentry.h:39:    virtual void Killed(Damage &damage);
+./src/eve-server/npc/NPC.cpp:300:void NPC::Killed(Damage &damage) {
+./src/eve-server/npc/NPC.cpp:306:        m_spawnMgr->SpawnKilled(m_bubble, m_self->itemID());
+./src/eve-server/npc/NPC.cpp:318:            sLog.Error("NPC::Killed()", "killer == IsDrone and pPlayer == nullptr");
+./src/eve-server/npc/NPC.cpp:340:        sLog.Error("NPC::Killed()", "Wreck Position is NaN");
+./src/eve-server/npc/NPC.cpp:345:        sLog.Error("NPC::Killed()", "Could not get wreckType for %s of type %u", m_self->name(), m_self->typeID());
+./src/eve-server/npc/NPC.cpp:355:        sLog.Error("NPC::Killed()", "Creating Wreck Item Failed for %s of type %u", wreck_name.c_str(), wreckTypeID);
+./src/eve-server/npc/NPC.cpp:360:        _log(PHYSICS__TRACE, "NPC::Killed() - NPC %s(%u) Position: %.2f,%.2f,%.2f.  Wreck %s(%u) Position: %.2f,%.2f,%.2f.", \
+./src/eve-server/npc/NPC.cpp:379:        sLog.Error("NPC::Killed()", "Spawning Wreck Failed for typeID %u", wreckTypeID);
+./src/eve-server/npc/Drone.h:65:    virtual void Killed(Damage &damage);
+./src/eve-server/npc/NPC.h:60:    virtual void Killed(Damage &damage);
+./src/eve-server/npc/Sentry.cpp:136:void Sentry::Killed(Damage &damage) {
+./src/eve-server/npc/Sentry.cpp:150:            sLog.Error("Sentry::Killed()", "killer == IsDrone and pPlayer == nullptr");
+./src/eve-server/npc/Sentry.cpp:171:        sLog.Error("Sentry::Killed()", "Wreck Position is NaN");
+./src/eve-server/npc/Sentry.cpp:176:        sLog.Error("Sentry::Killed()", "Could not get wreckType for %s of type %u", m_self->name(), m_self->typeID());
+./src/eve-server/npc/Sentry.cpp:186:        sLog.Error("Sentry::Killed()", "Creating Wreck Item Failed for %s of type %u", wreck_name.c_str(), wreckTypeID);
+./src/eve-server/npc/Sentry.cpp:191:        _log(PHYSICS__TRACE, "Sentry::Killed() - Sentry %s(%u) Position: %.2f,%.2f,%.2f.  Wreck %s(%u) Position: %.2f,%.2f,%.2f.", \
+./src/eve-server/npc/Sentry.cpp:210:        sLog.Error("Sentry::Killed()", "Spawning Wreck Failed: typeID or typeName not supported: '%u'", wreckTypeID);
+./src/eve-server/system/SystemEntity.h:270:    virtual void                Killed(Damage &damage);
+./src/eve-server/system/SystemEntity.h:550:    virtual void                Killed(Damage &damage);
+./src/eve-server/system/Damage.h:38:    // constructor for Killed() methods of derived SystemEntity objects with no weapon
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:223:void SpawnMgr::SpawnKilled(SystemBubble* pBubble, uint32 itemID)
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:228:        _log(SPAWN__DEPOP, "SpawnMgr::SpawnKilled::Belt - called by %u.", itemID);
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:244:            _log(SPAWN__DEPOP, "SpawnMgr::SpawnKilled - Belt Spawn has been destoyed.  Resetting spawn checks for bubble %u.", pBubble->GetID());
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:255:        _log(SPAWN__DEPOP, "SpawnMgr::SpawnKilled::Gate - called by %u.", itemID);
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:261:        _log(SPAWN__DEPOP, "SpawnMgr::SpawnKilled::Anomaly - called by %u.", itemID);
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:285:        _log(SPAWN__DEPOP, "SpawnMgr::SpawnKilled::Mission - called by %u.", itemID);
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:295:        _log(SPAWN__DEPOP, "SpawnMgr::SpawnKilled::Incursion - called by %u.", itemID);
+./src/eve-server/system/cosmicMgrs/SpawnMgr.cpp:298:        _log(SPAWN__DEPOP, "SpawnMgr::SpawnKilled::Other - called by %u.", itemID);
+./src/eve-server/system/cosmicMgrs/SpawnMgr.h:51:    void SpawnKilled(SystemBubble* pBubble, uint32 itemID);    // this DOES NOT remove entity from system or bubble.  user must do this BEFORE calling.
+./src/eve-common/EVE_Dungeon.h:132:            PlayerKilled = 26,
+./src/eve-server/system/Damage.cpp:376:        Killed(d);  // this must NOT remove dead SE from system.
+./src/eve-server/system/Damage.cpp:377:        SystemEntity::Killed(d);    // this removes dead SE from system then deletes itemRef and all its contents
+./src/eve-server/system/Damage.cpp:453:void ShipSE::Killed(Damage &fatal_blow) {
+./src/eve-server/system/Damage.cpp:473:            sLog.Error("Ship::Killed()", "killer == IsDrone and pPlayer == nullptr");
+./src/eve-server/system/Damage.cpp:491:        sLog.Error("Ship::Killed()", "Wreck Position is NaN");
+./src/eve-server/system/Damage.cpp:496:        sLog.Error("Ship::Killed()", "Could not get wreckType for %s of type %u", m_self->name(), m_self->typeID());
+./src/eve-server/system/Damage.cpp:508:            sLog.Error("Ship::Killed()", "Creating Wreck Item Failed for %s of type %u", wreck_name.c_str(), wreckTypeID);
+./src/eve-server/system/Damage.cpp:513:            _log(PHYSICS__TRACE, "Ship::Killed() - Ship %s(%u) Position: %.2f,%.2f,%.2f.  Wreck %s(%u) Position: %.2f,%.2f,%.2f.", \
+./src/eve-server/system/Damage.cpp:529:            sLog.Error("Ship::Killed()", "Spawning Wreck Failed: typeID or typeName not supported: '%u'", wreckTypeID);
+./src/eve-server/system/Damage.cpp:661:            sLog.Error("Ship::Killed()", "Creating Corpse Item Failed for %s of type %u", corpse_name.c_str(), corpseTypeID);
+./src/eve-server/system/Damage.cpp:674:                sLog.Error("Ship::Killed()", "Spawning Corpse Failed: typeID or typeName not supported: '%u'", corpseTypeID);
+./src/eve-server/system/Damage.cpp:676:                _log(PHYSICS__TRACE, "Ship::Killed() - Pod %s(%u) Position: %.2f,%.2f,%.2f.  Corpse %s(%u) Position: %.2f,%.2f,%.2f.", \
+./src/eve-server/system/Damage.cpp:697:            sLog.Error("Ship::Killed()", "Creating Wreck Item Failed for %s of type %u", wreck_name.c_str(), wreckTypeID);
+./src/eve-server/system/Damage.cpp:702:            _log(PHYSICS__TRACE, "Ship::Killed() - Ship %s(%u) Position: %.2f,%.2f,%.2f.  Wreck %s(%u) Position: %.2f,%.2f,%.2f.", \
+./src/eve-server/system/Damage.cpp:718:            sLog.Error("Ship::Killed()", "Spawning Wreck Failed for typeID %u", wreckTypeID);
+./src/eve-server/ship/Ship.h:320:    virtual void Killed(Damage &fatal_blow);            /* This method is defined in Damage.cpp */
+./src/eve-server/system/SystemEntity.cpp:146:void SystemEntity::Killed(Damage& damage)
+./src/eve-server/system/SystemEntity.cpp:639:void ObjectSystemEntity::Killed(Damage& damage)
+./src/eve-server/pos/Structure.cpp:1249:void StructureSE::Killed(Damage &damage)
+./src/eve-server/pos/Structure.cpp:1271:            sLog.Error("StructureSE::Killed()", "killer == IsDrone and pPlayer == nullptr");
+./src/eve-server/pos/Structure.cpp:1368:        sLog.Error("StructureSE::Killed()", "Wreck Position is NaN");
+./src/eve-server/pos/Structure.cpp:1374:        sLog.Error("StructureSE::Killed()", "Could not get wreckType for %s of type %u", m_self->name(), m_self->typeID());
+./src/eve-server/pos/Structure.cpp:1385:        sLog.Error("StructureSE::Killed()", "Creating Wreck Item Failed for %s of type %u", wreck_name.c_str(), wreckTypeID);
+./src/eve-server/pos/Structure.cpp:1390:        _log(PHYSICS__TRACE, "StructureSE::Killed() - Structure %s(%u) Position: %.2f,%.2f,%.2f.  Wreck %s(%u) Position: %.2f,%.2f,%.2f.",
+./src/eve-server/pos/Structure.cpp:1412:        sLog.Error("StructureSE::Killed()", "Spawning Wreck Failed: typeID or typeName not supported: '%u'", wreckTypeID);
+./src/eve-server/ship/ShipService.cpp:1336:    entity->Killed(damage);
+./src/eve-server/Client.cpp:285:        PickAlternateShip();    // incase shipID wasnt set correctly in db (seen on 'bad' Damage::Killed())
+./src/eve-server/Client.cpp:399:                    case Player::State::Killed: {
+./src/eve-server/Client.cpp:400:                        _log(CLIENT__TIMER, "ProcessClient()::IsDocked()::CheckState():  case: Killed");
+./src/eve-server/Client.cpp:473:                case Player::State::Killed: {
+./src/eve-server/Client.cpp:474:                    _log(CLIENT__TIMER, "ProcessClient()::CheckState():  case: Killed");
+./src/eve-server/Client.cpp:1244:    //SetStateTimer(Player::State::Killed, Player::Timer::Killed);
+./src/eve-server/Client.cpp:1688:        case Player::State::Killed:    return "Killed";
+./src/eve-server/pos/Structure.h:140:    virtual void                Killed(Damage &damage);
+./src/eve-server/admin/SystemCommands.cpp:708:                npcEntity->Killed(damage);
+./src/eve-server/admin/SystemCommands.cpp:712:                shipEntity->Killed(damage);
+./src/eve-server/admin/SystemCommands.cpp:740:            cur.second->GetNPCSE()->Killed(damage);
+./src/eve-common/EVE_Player.h:25:            Killed              = 800,    // used to reset ego after killed or otherwise changing ships
+./src/eve-common/EVE_Player.h:50:            Killed      = 5,
+./src/eve-server/planet/CustomsOffice.h:44:    virtual void                Killed(Damage &damage);
+./src/eve-server/planet/CustomsOffice.cpp:432:void CustomsSE::Killed(Damage &damage) {
+./src/eve-server/planet/CustomsOffice.cpp:446:            sLog.Error("CustomsSE::Killed()", "killer == IsDrone and pPlayer == nullptr");
+./src/eve-server/planet/CustomsOffice.cpp:536:        sLog.Error("CustomsSE::Killed()", "Creating Wreck Item Failed for %s of type %u", wreck_name.c_str(), 3962);
+./src/eve-server/planet/CustomsOffice.cpp:541:        _log(PHYSICS__TRACE, "Ship::Killed() - Ship %s(%u) Position: %.2f,%.2f,%.2f.  Wreck %s(%u) Position: %.2f,%.2f,%.2f.", \
+./src/eve-server/planet/CustomsOffice.cpp:562:        sLog.Error("CustomsSE::Killed()", "Spawning Wreck Failed: typeID or typeName not supported: '%u'", 3962);
+./src/eve-common/EVE_Standings.h:18:        PodKilled                       = 10,
+./src/eve-common/EVE_Standings.h:21:        ShipKilled                      = 27,
+./src/eve-common/EVE_Standings.h:274:     *  PodKilled = 10
+./src/eve-common/EVE_Standings.h:326:     *  ShipKilled = 27
+
+---- MATCHES FOR: OnEntityRemoved ----
+
+---- MATCHES FOR: m_targetID ----
+./src/eve-server/npc/Drone.cpp:55:    m_targetID = 0;
+./src/eve-server/npc/Drone.cpp:214:            du.targetID = m_targetID;
+./src/eve-server/npc/Drone.h:103:    uint32 GetTargetID()                                { return m_targetID/*m_targMgr->GetFirstTarget()->GetID()*/; }
+./src/eve-server/npc/Drone.h:111:    void SetTarget(SystemEntity* pSE = nullptr)         { (pSE == nullptr ? 0 : m_targetID = pSE->GetID()); }
+./src/eve-server/npc/Drone.h:123:    uint32 m_targetID;
+./src/eve-server/ship/modules/SuperWeapon.cpp:49:    m_targetID = pSE->GetID();
+./src/eve-server/ship/modules/SuperWeapon.cpp:137:            || (!m_shipRef->GetPilot()->GetShipSE()->SysBubble()->GetEntity(m_targetID))
+./src/eve-server/ship/modules/ActiveModule.h:63:    virtual uint32      GetTargetID()           { return m_targetID; }
+./src/eve-server/ship/modules/ActiveModule.h:101:    uint32              m_targetID;                     //passed to us by activate
+./src/eve-server/ship/modules/ActiveModule.cpp:37:m_targetID(0),
+./src/eve-server/ship/modules/ActiveModule.cpp:255:    m_targetID = 0;
+./src/eve-server/ship/modules/ActiveModule.cpp:309:            if (m_targetSE->GetID() != m_targetID) {
+./src/eve-server/ship/modules/ActiveModule.cpp:360:        m_targetID = targetID;
+./src/eve-server/ship/modules/ActiveModule.cpp:762:    if (IsValidTarget(m_targetID)
+./src/eve-server/ship/modules/ActiveModule.cpp:768:                m_modRef->name(), m_targetID, m_targetSE);
+./src/eve-server/ship/modules/ActiveModule.cpp:852:        m_targetID = 0;
+./src/eve-server/ship/modules/ActiveModule.cpp:1313:    const uint32 targetID = m_targetID;
+
+---- MATCHES FOR: targetID ----
+./src/eve-server/dogmaim/DogmaIMService.cpp:302:PyResult DogmaIMBound::AddTarget(PyCallArgs& call, PyInt* targetID) {
+./src/eve-server/dogmaim/DogmaIMService.cpp:312:    if (pClient->GetShipID() == targetID->value())
+./src/eve-server/dogmaim/DogmaIMService.cpp:323:        rsp.targetList.push_back(targetID->value());
+./src/eve-server/dogmaim/DogmaIMService.cpp:330:                .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:342:                .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:348:                        .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:356:                .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:367:                .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:371:    SystemEntity* tSE = pSysMgr->GetSE(targetID->value());
+./src/eve-server/dogmaim/DogmaIMService.cpp:373:        _log(INV__WARNING, "Unable to find entity %u in system %u from '%s'", targetID->value(), pSysMgr->GetID(), pClient->GetName());
+./src/eve-server/dogmaim/DogmaIMService.cpp:375:                .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:421:                .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:426:                    .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:431:                        .AddFormatValue ("target", new PyInt (targetID->value()))
+./src/eve-server/dogmaim/DogmaIMService.cpp:439:                .AddFormatValue ("target", new PyInt (targetID->value()));
+./src/eve-server/dogmaim/DogmaIMService.cpp:444:    rsp.targetList.push_back(targetID->value()); // not used in client
+./src/eve-server/dogmaim/DogmaIMService.cpp:448:PyResult DogmaIMBound::RemoveTarget(PyCallArgs& call, PyInt* targetID) {
+./src/eve-server/dogmaim/DogmaIMService.cpp:456:    SystemEntity* pTSE = pSysMgr->GetSE(targetID->value());
+./src/eve-server/dogmaim/DogmaIMService.cpp:458:        _log(SERVICE__ERROR, "Unable to find entity %u in system %u for '%s'", targetID->value(), pSysMgr->GetID(), pClient->GetName());
+./src/eve-server/dogmaim/DogmaIMService.h:89:    PyResult AddTarget(PyCallArgs& call, PyInt* targetID);
+./src/eve-server/dogmaim/DogmaIMService.h:90:    PyResult RemoveTarget(PyCallArgs& call, PyInt* targetID);
+./src/eve-server/dogmaim/DogmaIMService.h:98:     * flag, targetList = self.GetDogmaLM().AddTargetOBO(sid, tid) (structureID, targetID)
+./src/eve-server/dogmaim/DogmaIMService.h:99:     * self.GetDogmaLM().RemoveTargetOBO(sid, tid)  (structureID, targetID)
+./src/eve-common/destiny/DestinyStructs.h:166:    uint32 targetID;
+./src/eve-common/destiny/DestinyStructs.h:172:    int64 targetID;
+./src/eve-common/destiny/DestinyBinDump.cpp:154:            _log(into, "       formID: %u, targetID: %u, distance: %.1f", b->formationID, b->targetID, b->followRange);
+./src/eve-common/destiny/DestinyBinDump.cpp:160:            _log(into, "       formID: %u, targetID: %lli, followRange: %.1f, ownerID: %lli, start: %i", b->formationID, b->targetID, b->followRange, b->ownerID, b->effectStamp);
+./src/eve-common/EVE_Corp.h:74:    // these are 'remoteActions' from 'self.GetCorpRegistry().ExecuteActions(targetIDs, remoteActions)'
+./src/eve-server/pos/Structure.cpp:1214:    fxState->SetItem(3, PyStatic.NewNone());         // targetID
+./src/eve-server/cache/BulkMgrService.cpp:82:        self.perceptionTargets = self.LoadBulkIndex('perceptionTargets', const.cachePerceptionTargets, 'targetID')
+./src/eve-server/corporation/CorpRegistryBound.h:111:    PyResult ExecuteActions(PyCallArgs& call, PyList* targetIDs, PyList* remoteActions);
+./src/eve-server/corporation/CorpRegistryBound.cpp:2122:PyResult CorpRegistryBound::ExecuteActions(PyCallArgs &call, PyList* targetIDs, PyList* remoteActions) {
+./src/eve-server/corporation/CorpRegistryBound.cpp:2125:    //  return self.GetCorpRegistry().ExecuteActions(targetIDs, remoteActions)
+./src/eve-common/packets/Destiny.xmlp:168:              <!-- rowset: droneID, ownerID, controllerID, activityState, typeID, controllerOwnerID, targetID  -->
+./src/eve-common/packets/Destiny.xmlp:373:            <!-- 3: targetID -->
+./src/eve-common/packets/Destiny.xmlp:374:            <int name="targetID" default="0" none_marker="0" />
+./src/eve-common/packets/Destiny.xmlp:403:            <!-- 3: targetID or None -->
+./src/eve-common/packets/Destiny.xmlp:404:            <raw name="targetID" />
+./src/eve-common/packets/Destiny.xmlp:451:            <int name="targetID" />
+./src/eve-common/packets/Destiny.xmlp:748:            <!-- 6: targetID -->
+./src/eve-common/packets/Destiny.xmlp:749:            <int name="targetID" />
+./src/eve-common/packets/Missile.xmlp:9:          <int name="targetID" />
+./src/eve-common/packets/Missile.xmlp:24:      [PyInt targetID]
+./src/eve-server/ship/Ship.h:122:    void Activate(int32 itemID, std::string effectName, int32 targetID, int32 repeat);
+./src/eve-server/ship/Ship.cpp:1039:void ShipItem::Activate(int32 itemID, std::string effectName, int32 targetID, int32 repeat)
+./src/eve-server/ship/Ship.cpp:1041:    if (IsValidTarget(targetID)) {
+./src/eve-server/ship/Ship.cpp:1042:        m_targetRef = sItemFactory.GetItemRef(targetID);
+./src/eve-server/ship/Ship.cpp:1047:    m_ModuleManager->Activate( itemID, sFxDataMgr.GetEffectID(effectName), targetID, repeat);
+./src/eve-server/ship/Ship.cpp:2653:                orbit.targetID = m_destiny->GetTargetID();
+./src/eve-server/effects/EffectsData.h:391: * (71, 'TARGETSILENTLY', '', 'TargetSilently()', 0, 0, 4, 'dogmaLM.AddTargetEx(shipID,targetID, silent=1, tasklet=1)')
+./src/eve-common/packets/DogmaIM.xmlp:25:      <int name="targetID" />
+./src/eve-common/packets/DogmaIM.xmlp:89:      <raw name="target" /> <!-- targetID or PyNone-->
+./src/eve-server/ship/modules/ModuleManager.cpp:691:void ModuleManager::Activate(int32 itemID, uint16 effectID, int32 targetID, int32 repeat)
+./src/eve-server/ship/modules/ModuleManager.cpp:710:    _log(MODULE__TRACE, "MM::Activate() - %s (%u - %s)  targetID: %i, repeat: %i.",
+./src/eve-server/ship/modules/ModuleManager.cpp:714:         targetID,
+./src/eve-server/ship/modules/ModuleManager.cpp:735:        SystemEntity* pSE = pShipItem->GetPilot()->SystemMgr()->GetSE(targetID);
+./src/eve-server/ship/modules/ModuleManager.cpp:761:        pMod->Activate(effectID, targetID, repeat);
+./src/eve-server/ship/modules/CynoModule.cpp:33:void CynoModule::Activate(uint16 effectID, uint32 targetID, int16 repeat)
+./src/eve-server/ship/modules/CynoModule.cpp:38:    ActiveModule::Activate(effectID, targetID, repeat);
+./src/eve-server/ship/modules/MiningLaser.cpp:193:         "%s(%u) ProcessCycle(%s) - targetID %u, holdFlag %u",
+./src/eve-server/ship/modules/ModuleManager.h:63:    void Activate(int32 itemID, uint16 effectID, int32 targetID, int32 repeat);
+./src/eve-server/ship/modules/GenericModule.h:147:    virtual void Activate(uint16 effectID, uint32 targetID=0, int16 repeat=0)
+./src/eve-server/ship/modules/Prospector.cpp:57:void Prospector::Activate(uint16 effectID, uint32 targetID, int16 repeat)
+./src/eve-server/ship/modules/Prospector.cpp:63:    ActiveModule::Activate(effectID, targetID, repeat);
+./src/eve-server/ship/modules/ActiveModule.h:45:    virtual void        Activate(uint16 effectID, uint32 targetID=0, int16 repeat=0);
+./src/eve-server/ship/modules/ActiveModule.h:63:    virtual uint32      GetTargetID()           { return m_targetID; }
+./src/eve-server/ship/modules/ActiveModule.h:101:    uint32              m_targetID;                     //passed to us by activate
+./src/eve-server/ship/modules/MiningLaser.h:30:    //virtual void Activate(uint16 effectID, uint32 targetID=0, int16 repeat=0);
+./src/eve-server/ship/Missile.cpp:198:        miss.targetID = m_destiny->GetTargetID();
+./src/eve-server/ship/modules/ActiveModule.cpp:37:m_targetID(0),
+./src/eve-server/ship/modules/ActiveModule.cpp:255:    m_targetID = 0;
+./src/eve-server/ship/modules/ActiveModule.cpp:309:            if (m_targetSE->GetID() != m_targetID) {
+./src/eve-server/ship/modules/ActiveModule.cpp:326:void ActiveModule::Activate(uint16 effectID, uint32 targetID/*0*/, int16 repeat/*0*/)
+./src/eve-server/ship/modules/ActiveModule.cpp:330:         "ActiveModule::Activate - %s(%u) effectID:%u targetID:%u repeat:%d state:%s",
+./src/eve-server/ship/modules/ActiveModule.cpp:334:         targetID,
+./src/eve-server/ship/modules/ActiveModule.cpp:356:    if (IsValidTarget(targetID)) {
+./src/eve-server/ship/modules/ActiveModule.cpp:360:        m_targetID = targetID;
+./src/eve-server/ship/modules/ActiveModule.cpp:361:        m_targetSE = m_shipRef->GetPilot()->SystemMgr()->GetSE(targetID);
+./src/eve-server/ship/modules/ActiveModule.cpp:440:    if (IsValidTarget(targetID))
+./src/eve-server/ship/modules/ActiveModule.cpp:762:    if (IsValidTarget(m_targetID)
+./src/eve-server/ship/modules/ActiveModule.cpp:767:        _log(MODULE__INFO, "%s - DeactivateCycle() - need target = true and targetID: %u, targSE: %x", \
+./src/eve-server/ship/modules/ActiveModule.cpp:768:                m_modRef->name(), m_targetID, m_targetSE);
+./src/eve-server/ship/modules/ActiveModule.cpp:852:        m_targetID = 0;
+./src/eve-server/ship/modules/ActiveModule.cpp:1313:    const uint32 targetID = m_targetID;
+./src/eve-server/ship/modules/ActiveModule.cpp:1352:        ge.target   = (targetID != 0) ? (PyRep*)new PyInt(targetID) : PyStatic.NewNone();
+./src/eve-server/ship/modules/ActiveModule.cpp:1404:                    shipID, modID, typeID, targetID, 0, guid,
+./src/eve-server/ship/modules/ActiveModule.cpp:1417:        shipID, modID, effectID, targetID,
+./src/eve-server/ship/modules/CynoModule.h:26:    virtual void Activate(uint16 effectID, uint32 targetID=0, int16 repeat=0);
+./src/eve-server/ship/modules/Prospector.h:28:    virtual void Activate(uint16 effectID, uint32 targetID=0, int16 repeat=0);
+./src/eve-server/ship/modules/SuperWeapon.cpp:49:    m_targetID = pSE->GetID();
+./src/eve-server/ship/modules/SuperWeapon.cpp:137:            || (!m_shipRef->GetPilot()->GetShipSE()->SysBubble()->GetEntity(m_targetID))
+./src/eve-server/ship/modules/SuperWeapon.cpp:228:        ge.targetID = 0;
+./src/eve-server/npc/Drone.cpp:55:    m_targetID = 0;
+./src/eve-server/npc/Drone.cpp:205:    //OnDroneStateChange(droneID, ownerID, controllerID, activityState, droneTypeID, controllerOwnerID, targetID)
+./src/eve-server/npc/Drone.cpp:214:            du.targetID = m_targetID;
+./src/eve-server/npc/Drone.cpp:323:                orbit.targetID = m_destiny->GetTargetID();
+./src/eve-server/npc/EntityService.h:43:    PyResult CmdEngage(PyCallArgs& call, PyList* droneIDs, PyInt* targetID);
+./src/eve-server/npc/EntityService.h:48:    PyResult CmdMine(PyCallArgs& call, PyList* droneIDs, PyInt* targetID);
+./src/eve-server/npc/EntityService.h:49:    PyResult CmdMineRepeatedly(PyCallArgs& call, PyList* droneIDs, PyInt* targetID);
+./src/eve-server/npc/EntityService.h:50:    PyResult CmdUnanchor(PyCallArgs& call, PyList* droneIDs, PyInt* targetID);
+./src/eve-server/npc/NPC.cpp:177:                orbit.targetID = m_destiny->GetTargetID();
+./src/eve-server/system/DestinyManager.cpp:2003:        du.targetID = pSE->GetID();
+./src/eve-server/system/DestinyManager.cpp:2755:        miss.targetID = pTarget->GetID();
+./src/eve-server/system/DestinyManager.cpp:2910:        fb.targetID = pShipSE->GetID();
+./src/eve-server/system/DestinyManager.cpp:3081:// def OnSpecialFX(shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid, isOffensive,
+./src/eve-server/system/DestinyManager.cpp:3083:void DestinyManager::SendSpecialEffect10(uint32 entityID, uint32 targetID, std::string guid,
+./src/eve-server/system/DestinyManager.cpp:3088:    // ("OnSpecialFX", shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid,
+./src/eve-server/system/DestinyManager.cpp:3102:    ev->SetItem(4,  new PyInt(targetID));        // targetID
+./src/eve-server/system/DestinyManager.cpp:3117:             entityID, targetID, guid.c_str(),
+./src/eve-server/system/DestinyManager.cpp:3127:                                      uint32 targetID, uint32 chargeTypeID, std::string guid,
+./src/eve-server/system/DestinyManager.cpp:3133:    // ("OnSpecialFX", shipID, moduleID, moduleTypeID, targetID, otherTypeID, area, guid,
+./src/eve-server/system/DestinyManager.cpp:3153:    ev->SetItem(4,  new PyInt(targetID));          // targetID
+./src/eve-server/system/DestinyManager.cpp:3174:             entityID, moduleID, moduleTypeID, targetID, chargeTypeID, guid.c_str(),
+./src/eve-server/system/DestinyManager.cpp:3210:        effect.targetID = gateID;
+./src/eve-server/system/DestinyManager.cpp:3222:        effect.targetID = wormholeID;
+./src/eve-server/system/DestinyManager.cpp:3269:        effect.targetID = new PyInt(shipID);
+./src/eve-server/system/DestinyManager.cpp:3292:        effect.targetID = new PyInt(mySE->GetID());
+./src/eve-server/system/DestinyManager.h:188:    void SendSpecialEffect10(uint32 entityID, uint32 targetID, std::string guid, bool isOffensive, bool start, bool isActive) const;
+./src/eve-server/system/DestinyManager.h:189:    void SendSpecialEffect(uint32 entityID, uint32 moduleID, uint32 moduleTypeID, uint32 targetID, uint32 chargeTypeID, std::string guid, bool isOffensive, bool start, bool isActive, int32 duration, uint32 repeat, int32 graphicInfo = 0) const;
+./src/eve-server/npc/Drone.h:103:    uint32 GetTargetID()                                { return m_targetID/*m_targMgr->GetFirstTarget()->GetID()*/; }
+./src/eve-server/npc/Drone.h:111:    void SetTarget(SystemEntity* pSE = nullptr)         { (pSE == nullptr ? 0 : m_targetID = pSE->GetID()); }
+./src/eve-server/npc/Drone.h:123:    uint32 m_targetID;
+./src/eve-server/npc/DroneAI.cpp:54:     *   Combat            = 1,  // fighting - needs targetID
+./src/eve-server/npc/DroneAI.cpp:55:     *   Mining            = 2,  // unsure - needs targetID
+./src/eve-server/npc/DroneAI.cpp:62:     *   Engaged           = 10, // non-combat? - needs targetID
+./src/eve-server/npc/EntityService.cpp:32:            Combat            = 1,  // fighting - needs targetID
+./src/eve-server/npc/EntityService.cpp:33:            Mining            = 2,  // unsure - needs targetID
+./src/eve-server/npc/EntityService.cpp:40:            Engaged           = 10, // non-combat? - needs targetID
+./src/eve-server/npc/EntityService.cpp:116:PyResult EntityBound::CmdEngage(PyCallArgs &call, PyList* droneIDs, PyInt* targetID) {
+./src/eve-server/npc/EntityService.cpp:117: // ret = entity.CmdEngage(droneIDs, targetID)
+./src/eve-server/npc/EntityService.cpp:222:PyResult EntityBound::CmdMine(PyCallArgs &call, PyList* droneIDs, PyInt* targetID) {
+./src/eve-server/npc/EntityService.cpp:223: // ret = entity.CmdMine(droneIDs, targetID)
+./src/eve-server/npc/EntityService.cpp:246:PyResult EntityBound::CmdMineRepeatedly(PyCallArgs &call, PyList* droneIDs, PyInt* targetID) {
+./src/eve-server/npc/EntityService.cpp:247: // ret = entity.CmdMineRepeatedly(droneIDs, targetID)
+./src/eve-server/npc/EntityService.cpp:269:PyResult EntityBound::CmdUnanchor(PyCallArgs &call, PyList* droneIDs, PyInt* targetID) {
+./src/eve-server/npc/EntityService.cpp:270: // ret = entity.CmdUnanchor(droneIDs, targetID)
+./src/eve-server/npc/DroneAI.h:22:            Combat            = 1,  // fighting - needs targetID
+./src/eve-server/npc/DroneAI.h:23:            Mining            = 2,  // unsure - needs targetID
+./src/eve-server/npc/DroneAI.h:30:            Engaged           = 10, // non-combat? - needs targetID
+./src/eve-server/system/TargetManager.cpp:355:        te.targetID = tSE->GetID();
+./src/eve-server/system/TargetManager.cpp:408:        te.targetID = tSE->GetID();
+./src/eve-server/system/TargetManager.cpp:438:        te.targetID = tSE->GetID();
+./src/eve-server/system/TargetManager.cpp:453:        te.targetID = tSE->GetID();
+./src/eve-server/system/TargetManager.cpp:469:        te.targetID = 0;
+./src/eve-server/system/TargetManager.cpp:523:SystemEntity* TargetManager::GetTarget(uint32 targetID, bool need_locked/*true*/) const {
+./src/eve-server/system/TargetManager.cpp:529:        if (itr->first->GetID() != targetID)
+./src/eve-server/system/TargetManager.cpp:533:            _log(TARGET__INFO, "Found target %u, but it is not locked.", targetID);
+./src/eve-server/system/TargetManager.cpp:536:        _log(TARGET__INFO, "Found target %u: %s (nl? %s)", targetID, itr->first->GetName(), need_locked?"yes":"no");
+./src/eve-server/system/TargetManager.cpp:539:    _log(TARGET__INFO, "Unable to find target %u (nl? %s)", targetID, need_locked?"yes":"no");
+./src/eve-server/system/TargetManager.new:132:    te.targetID = tSE->GetID();
+./src/eve-server/system/TargetManager.new:479:SystemEntity* TargetManager::GetTarget(uint32 targetID, bool need_locked/*true*/) const {
+./src/eve-server/system/TargetManager.new:485:        if (itr->first->GetID() != targetID)
+./src/eve-server/system/TargetManager.new:490:                    targetID, TargetManager::GetStateName(itr->second->state));
+./src/eve-server/system/TargetManager.new:493:        _log(TARGET__INFO, "Found target %u: %s (nl? %s)", targetID, itr->first->GetName(), need_locked?"yes":"no");
+./src/eve-server/system/TargetManager.new:496:    _log(TARGET__WARNING, "Unable to find target %u (nl? %s)", targetID, need_locked?"yes":"no");
+./src/eve-server/system/TargetManager.h:131:    SystemEntity*       GetTarget(uint32 targetID, bool need_locked=true) const;
+./src/eve-server/system/TargetManager.h:223:u'TargetNoLongerPresentBody'}(u'{[item]moduleID.name} deactivates as the {[item]targetID.name} it was targeted at is no longer present.', None, {u'{[item]moduleID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'moduleID'}, u'{[item]targetID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'targetID'}})
+./src/eve-server/system/TargetManager.h:249:{'FullPath': u'UI/Messages', 'messageID': 258855, 'label': u'TargetNoLongerPresentBody'}(u'{[item]moduleID.name} deactivates as the {[item]targetID.name} it was targeted at is no longer present.', None, {u'{[item]moduleID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'moduleID'}, u'{[item]targetID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'targetID'}})
+./src/eve-server/system/TargetManager.h:250:{'FullPath': u'UI/Messages', 'messageID': 258858, 'label': u'TargetNotLockedBody'}(u'{[item]moduleID.name} deactivates because its target, {[item]targetID}, is not locked.', None, {u'{[item]targetID}': {'conditionalValues': [], 'variableType': 2, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'targetID'}, u'{[item]moduleID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'moduleID'}})
+./src/eve-server/system/TargetManager.h:254:{'FullPath': u'UI/Messages', 'messageID': 258865, 'label': u'TargetingMissileToSelfBody'}(u'It is not a good idea to shoot a missile at yourself. Code {shipID} {targetID}.', None, {u'{shipID}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'shipID'}, u'{targetID}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'targetID'}})
+./src/eve-server/system/TargetManager.h:264:{'FullPath': u'UI/Messages', 'messageID': 258842, 'label': u'TargetExplodingBody'}(u'{[item]moduleTypeID.name} deactivates as {[item]targetID.name} begins to explode.', None, {u'{[item]targetID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'targetID'}, u'{[item]moduleTypeID.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'moduleTypeID'}})
+./src/eve-server/system/SystemBubble.cpp:951:        header->SetItemString(6, "targetID");
+
+---- MATCHES FOR: Abort ----
+./src/eve-server/manufacturing/RamProxyService.cpp:586:    FactoryDB::CompleteJob(args.jobID, (args.cancel ? EvERam::Status::Abort : EvERam::Status::Delivered));
+./src/eve-server/contract/ContractProxy.cpp:203:        codelog(SERVICE__ERROR, "%s: ContractType was not specified. Aborting search", GetName());
+./src/eve-server/contract/ContractProxy.cpp:438:        codelog(SERVICE__ERROR, "No traded or requested items was specified. Aborting");
+./src/eve-server/contract/ContractUtils.cpp:90:        codelog(SERVICE__ERROR, "No contract with ID '%s' was found. Aborting", contractID.c_str());
+./src/eve-server/contract/ContractUtils.cpp:108:        codelog(SERVICE__ERROR, "ContractUtils: contractIDList was empty. Aborting");
+./src/eve-server/contract/ContractUtils.cpp:199:        codelog(SERVICE__ERROR, "No contracts in range ('%s') was found. Aborting", contractIDs.c_str());
+./src/eve-server/station/TradeService.cpp:54:    EVEBoundObject::Add("Abort", &TradeBound::Abort);
+./src/eve-server/station/TradeService.cpp:101:PyResult TradeBound::Abort(PyCallArgs &call) {
+./src/eve-server/station/TradeService.cpp:218:        //Handle_Abort(call);   << this will cancel and nullify the trade session
+./src/eve-server/station/TradeService.h:120:    PyResult Abort(PyCallArgs& call);
+./src/eve-server/account/TutorialService.cpp:298:            sm.RemoteSvc('tutorialSvc').LogAborted(tutorialID, pageNo, int(time))
+./src/eve-common/EVE_RAM.h:39:            Abort = 2,
+./src/eve-common/EVE_RAM.h:40:            GMAbort = 3,
+./src/eve-common/EVE_Standings.h:62:     *  Aborted = 158
+./src/eve-server/missions/MissionMgrService.h:78: * {'messageKey': 'NotYourMissionToAbort', 'dataID': 17882092, 'suppressable': False, 'bodyID': 259005, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1360}
+./src/eve-server/ship/ShipService.cpp:410:                        pClient->SendErrorMsg("This Moon already has a Control Tower in orbit.  Aborting Drop.");
+./src/eve-server/ship/ShipService.cpp:415:                        pClient->SendErrorMsg("You need an anchored Control Tower before launching modules.  Aborting Drop.");
+./src/eve-server/ship/ShipService.cpp:511:                            pClient->SendErrorMsg("There is already a Sovereignty Blockade Unit on this stargate.  Aborting Drop.");
+./src/eve-server/ship/ShipService.cpp:521:                                    pClient->SendErrorMsg("There is already a Sovereignty Blockade Unit on this stargate.  Aborting Drop.");
+./src/eve-server/ship/ShipService.cpp:534:                                pClient->SendErrorMsg("There is already a Territorial Claim Unit in this system.  Aborting Drop.");
+./src/eve-server/ship/ShipService.cpp:550:                                pClient->SendErrorMsg("There is already an Infrastructure Hub this system.  Aborting Drop.");
+./src/eve-server/ship/ShipService.cpp:1347:                [PyString "SelfDestructAborted2"]
+./src/eve-server/ship/ShipService.cpp:1353:                [PyString "SelfDestructAborted2"]
+./src/eve-server/ship/ShipService.cpp:1359:        throw UserError ("SelfDestructAborted2");
+./src/eve-server/ship/ShipService.cpp:1362:    /*{'messageKey': 'SelfDestructAborted2', 'dataID': 17879480, 'suppressable': False, 'bodyID': 258024, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 2405}
+./src/eve-server/ship/ShipService.cpp:1363:     * {'messageKey': 'SelfDestructAbortedOther2', 'dataID': 17879483, 'suppressable': False, 'bodyID': 258025, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 2406}
+./src/eve-server/ship/BeyonceService.cpp:134:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:167:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:197:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:234:    } else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:313:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:365:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:592:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:640:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:669:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:726:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:793:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:917:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:993:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/BeyonceService.cpp:1077:    }  else if (pDestiny->AbortIfLoginWarping(true)) {
+./src/eve-server/ship/modules/ModuleManager.cpp:483:    pMod->AbortCycle();
+./src/eve-server/ship/modules/ModuleManager.cpp:506:    pMod->AbortCycle();
+./src/eve-server/ship/modules/ModuleManager.cpp:649:void ModuleManager::AbortCycle()
+./src/eve-server/ship/modules/ModuleManager.cpp:653:            cur.second->AbortCycle();
+./src/eve-server/ship/modules/ModuleManager.cpp:1299:                cur.second->AbortCycle();
+./src/eve-server/ship/modules/ModuleManager.cpp:1308:    AbortCycle();
+./src/eve-server/ship/modules/GenericModule.cpp:292:                GetActiveModule()->AbortCycle();
+./src/eve-server/ship/modules/GenericModule.cpp:299:                GetActiveModule()->AbortCycle();
+./src/eve-server/ship/modules/MiningLaser.cpp:177:             "%s(%u) ProcessCycle(%s) - m_targetSE is null. Aborting cycle.",
+./src/eve-server/ship/modules/ModuleManager.h:101:    void AbortCycle();
+./src/eve-server/ship/modules/GenericModule.h:134:    virtual void AbortCycle()                           { /* do nothing here */ }
+./src/eve-server/ship/modules/Prospector.cpp:104:        AbortCycle();
+./src/eve-server/ship/Ship.h:146:    void AbortCycle()                                   { m_ModuleManager->AbortCycle(); }
+./src/eve-server/ship/Ship.h:356:    void AbortCycle()                                   { m_shipRef->AbortCycle(); }
+./src/eve-server/ship/modules/ActiveModule.h:40:    virtual void        AbortCycle();
+./src/eve-server/ship/Ship.cpp:354:        m_ModuleManager->AbortCycle();
+./src/eve-server/ship/modules/ActiveModule.cpp:553:        AbortCycle();
+./src/eve-server/ship/modules/ActiveModule.cpp:565:            AbortCycle();  // CHECK THIS  for initial activate
+./src/eve-server/ship/modules/ActiveModule.cpp:579:                AbortCycle();  // CHECK THIS  for initial activate
+./src/eve-server/ship/modules/ActiveModule.cpp:599:            AbortCycle();
+./src/eve-server/ship/modules/ActiveModule.cpp:721:void ActiveModule::AbortCycle()
+./src/eve-server/ship/modules/ActiveModule.cpp:723:    _log(MODULE__TRACE, "%s(%u) calling AbortCycle() - state: %s, m_stop:%s", \
+./src/eve-server/ship/modules/ActiveModule.cpp:1476:        AbortCycle();
+./src/eve-server/ship/modules/ActiveModule.cpp:1485:        AbortCycle();
+./src/eve-server/system/TargetManager.new:567:        cur.second->AbortCycle();
+./src/eve-server/system/TargetManager.new:593:                cur.second->AbortCycle();
+./src/eve-server/system/DestinyManager.cpp:482:// `AbortIfLoginWarping` prevents the player from moving, warping, stopping,
+./src/eve-server/system/DestinyManager.cpp:492:bool DestinyManager::AbortIfLoginWarping(bool showMsg) {
+./src/eve-server/system/DestinyManager.cpp:509:    if (AbortIfLoginWarping(false)) {
+./src/eve-server/system/DestinyManager.cpp:2422:        pClient->SendErrorMsg("Station Not Found, Docking Aborted.");
+./src/eve-server/system/DestinyManager.cpp:3373:            "Destiny::SendSetState() the player isn't in a system bubble! Aborting attempt to send state."
+./src/eve-server/system/TargetManager.h:88:    // iterate thru the map of modules targeting this object and call AbortCycle on each.
+./src/eve-server/system/DestinyManager.h:225:    bool AbortIfLoginWarping(bool showMsg);
+./src/eve-server/system/TargetManager.cpp:280:        module->AbortCycle ();
+./src/eve-server/system/TargetManager.cpp:603:                module->AbortCycle();
+./src/eve-server/system/Damage.cpp:589:        AbortCycle();
+
+---- MATCHES FOR: Deactivate ----
+./src/eve-server/ship/Ship.h:123:    void Deactivate(int32 itemID, std::string effectName) { m_ModuleManager->Deactivate(itemID, effectName); }
+./src/eve-server/ship/Ship.cpp:365:    m_ModuleManager->DeactivateAll();
+./src/eve-server/ship/Ship.cpp:1881:    m_ModuleManager->DeactivateAll(); 
+./src/eve-server/ship/Ship.cpp:1902:    m_ModuleManager->DeactivateAll();
+./src/eve-server/ship/modules/ModuleManager.cpp:674:void ModuleManager::DeactivateAll()
+./src/eve-server/ship/modules/ModuleManager.cpp:676:    // Deactivate all fitted modules (rigs + hi/mid/low)
+./src/eve-server/ship/modules/ModuleManager.cpp:680:            itr->second->Deactivate();
+./src/eve-server/ship/modules/ModuleManager.cpp:683:    // Deactivate all subsystems (if any)
+./src/eve-server/ship/modules/ModuleManager.cpp:687:            sitr->second->Deactivate();
+./src/eve-server/ship/modules/ModuleManager.cpp:765:void ModuleManager::Deactivate(uint32 itemID, std::string effectName)
+./src/eve-server/ship/modules/ModuleManager.cpp:769:        _log(MODULE__ERROR, "MM::Deactivate() - Called on module %u that is not loaded.", itemID );
+./src/eve-server/ship/modules/ModuleManager.cpp:775:        _log(MODULE__TRACE, "MM::Deactivate() - %s Offlining - '%s'", pMod->GetSelf()->name(), effectName.c_str());
+./src/eve-server/ship/modules/ModuleManager.cpp:784:    _log(MODULE__TRACE, "MM::Deactivate() - %s Deactivating - '%s'", pMod->GetSelf()->name(), effectName.c_str());
+./src/eve-server/ship/modules/ModuleManager.cpp:785:    pMod->Deactivate(effectName);
+./src/eve-server/ship/modules/ModuleManager.cpp:1295:    // check modules for warpsafe-ness and Deactivate accordingly
+./src/eve-server/ship/modules/ModuleManager.cpp:1323:                    cur.second->Deactivate();
+./src/eve-server/ship/modules/CynoModule.cpp:51:void CynoModule::DeactivateCycle(bool abort)
+./src/eve-server/ship/modules/CynoModule.cpp:56:    ActiveModule::DeactivateCycle(abort);
+./src/eve-server/ship/modules/MiningLaser.cpp:149:void MiningLaser::DeactivateCycle(bool abort/*false*/)
+./src/eve-server/ship/modules/MiningLaser.cpp:174:    // NOTE: ProcessCycle can still be invoked from an already-scheduled timer tick even after DeactivateCycle().
+./src/eve-server/ship/modules/MiningLaser.cpp:188:        ActiveModule::DeactivateCycle(true);
+./src/eve-server/ship/modules/MiningLaser.cpp:212:        ActiveModule::DeactivateCycle(true);
+./src/eve-server/ship/modules/MiningLaser.cpp:245:        ActiveModule::DeactivateCycle(true);
+./src/eve-server/ship/modules/MiningLaser.cpp:317:        ActiveModule::DeactivateCycle(true);
+./src/eve-server/ship/modules/MiningLaser.cpp:394:        cur.second->AddOreAndDeactivate(roidRef->typeID(), oreAmount);
+./src/eve-server/ship/modules/MiningLaser.cpp:408:    AddOreAndDeactivate(roidRef->typeID(), roidQuantity * percent, false);
+./src/eve-server/ship/modules/MiningLaser.cpp:411:void MiningLaser::AddOreAndDeactivate(uint16 typeID, float amt, bool slave/*true*/) {
+./src/eve-server/ship/modules/MiningLaser.cpp:416:             "AddOreAndDeactivate() - Could not create mined ore for %s(%u)",
+./src/eve-server/ship/modules/MiningLaser.cpp:423:             "AddOreAndDeactivate() - Could not add ore to hold for %s(%u)",
+./src/eve-server/ship/modules/MiningLaser.cpp:431:        ActiveModule::DeactivateCycle(true);
+./src/eve-server/ship/modules/MiningLaser.cpp:459: * {'messageKey': 'MiningDronesDeactivatedAsteroidEmpty', 'dataID': 17883322, 'suppressable': False, 'bodyID': 259462, 'messageType': 'notify', 'urlAudio': 'wise:/msg_MiningDronesDeactivatedAsteroidEmpty_play', 'urlIcon': '', 'titleID': None, 'messageID': 1168}
+./src/eve-server/ship/modules/MiningLaser.cpp:460: * {'messageKey': 'MiningDronesDeactivatedCargoHoldFull', 'dataID': 17883265, 'suppressable': False, 'bodyID': 259442, 'messageType': 'notify', 'urlAudio': 'wise:/msg_MiningDronesDeactivatedCargoHoldFull_play', 'urlIcon': '', 'titleID': None, 'messageID': 1169}
+./src/eve-server/ship/modules/MiningLaser.cpp:461: * {'messageKey': 'MiningDronesDeactivatedCargoHoldNowFull', 'dataID': 17883243, 'suppressable': False, 'bodyID': 259434, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1170}
+./src/eve-server/ship/modules/MiningLaser.cpp:462: * {'messageKey': 'MiningDronesDeactivatedOutOfRange', 'dataID': 17883208, 'suppressable': False, 'bodyID': 259422, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1171}
+./src/eve-server/ship/modules/MiningLaser.cpp:467: * {'FullPath': u'UI/Messages', 'messageID': 259422, 'label': u'MiningDronesDeactivatedOutOfRangeBody'}(u'{[item]module.name} deactivates without transfering ore to your cargo hold because your ship has strayed to a distance of {[numeric]distance} m, beyond its mining range of {[numeric]range} m.', None, {u'{[numeric]distance}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'distance'}, u'{[numeric]range}': {'conditionalValues': [], 'variableType': 9, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'range'}, u'{[item]module.name}': {'conditionalValues': [], 'variableType': 2, 'propertyName': 'name', 'args': 0, 'kwargs': {}, 'variableName': 'module'}})
+./src/eve-server/ship/modules/MiningLaser.cpp:468: * {'FullPath': u'UI/Messages', 'messageID': 259434, 'label': u'MiningDronesDeactivatedCargoHoldNowFullBody'}(u'{modulename} deactivates. Your cargo hold does not have sufficient space to contain more ore, so loading algorithms have deactivated the {modulename} before it becomes overloaded.', None, {u'{modulename}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'modulename'}})
+./src/eve-server/ship/modules/MiningLaser.cpp:469: * {'FullPath': u'UI/Messages', 'messageID': 259442, 'label': u'MiningDronesDeactivatedCargoHoldFullBody'}(u'{modulename} disperses its load of freshly mined ore into space unrecoverably, then deactivates. Your cargo hold is full.', None, {u'{modulename}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'modulename'}})
+./src/eve-server/ship/modules/MiningLaser.cpp:470: * {'FullPath': u'UI/Messages', 'messageID': 259462, 'label': u'MiningDronesDeactivatedAsteroidEmptyBody'}(u'{modulename} deactivates as it finds the resource it was harvesting a pale shadow of its former glory.', None, {u'{modulename}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'modulename'}})
+./src/eve-server/ship/modules/ModuleManager.h:61:    // Deactivate all modules without offlining them (do NOT clear AttrOnline)
+./src/eve-server/ship/modules/ModuleManager.h:62:    void DeactivateAll();
+./src/eve-server/ship/modules/ModuleManager.h:64:    void Deactivate(uint32 itemID, std::string effectName);
+./src/eve-server/ship/modules/GenericModule.h:133:    virtual void Deactivate(std::string effect="")      { /* do nothing here */ }
+./src/eve-server/ship/modules/Prospector.cpp:66:        ActiveModule::Deactivate();
+./src/eve-server/ship/modules/ActiveModule.h:42:    virtual void        Deactivate(std::string effect="");
+./src/eve-server/ship/modules/ActiveModule.h:44:    virtual void        DeactivateCycle(bool abort=false); // this needs state=Deactivating for normal op.  set abort=true to cancel current cycle
+./src/eve-server/ship/modules/ActiveModule.h:48:    /* generic DoCycle() for active modules that only affect ship on Activate/Deactivate (not recurring on each cycle)
+./src/eve-server/ship/modules/MiningLaser.h:26:    virtual void DeactivateCycle(bool abort=false);
+./src/eve-server/ship/modules/MiningLaser.h:31:    //virtual void Deactivate(std::string effect="");
+./src/eve-server/ship/modules/MiningLaser.h:43:    void AddOreAndDeactivate(uint16 typeID, float amt, bool slave=true);
+./src/eve-server/ship/modules/MiningLaser.h:45:    void CancelOnError()                                { ActiveModule::DeactivateCycle(true); }
+./src/eve-server/ship/modules/ActiveModule.cpp:306:                DeactivateCycle(true);
+./src/eve-server/ship/modules/ActiveModule.cpp:310:                DeactivateCycle(true);
+./src/eve-server/ship/modules/ActiveModule.cpp:322:        Deactivate();
+./src/eve-server/ship/modules/ActiveModule.cpp:501:void ActiveModule::Deactivate(std::string effect/*""*/)
+./src/eve-server/ship/modules/ActiveModule.cpp:504:        _log(MODULE__TRACE, "ActiveModule::Deactivate - %s called Deactivate but is not currently Activated (%s).", m_modRef->name(), GetModuleStateName(m_ModuleState));
+./src/eve-server/ship/modules/ActiveModule.cpp:508:    _log(MODULE__TRACE, "ActiveModule::Deactivate(%s) - module %s(%u) remaining time %ums.", \
+./src/eve-server/ship/modules/ActiveModule.cpp:514:        DeactivateCycle(true);
+./src/eve-server/ship/modules/ActiveModule.cpp:734:    DeactivateCycle(true);
+./src/eve-server/ship/modules/ActiveModule.cpp:739:void ActiveModule::DeactivateCycle(bool abort/*false*/)
+./src/eve-server/ship/modules/ActiveModule.cpp:744:    _log(MODULE__TRACE, "%s(%u) calling DeactivateCycle(abort: %s)", m_modRef->name(), m_modRef->itemID(), abort?"true":"false");
+./src/eve-server/ship/modules/ActiveModule.cpp:746:        _log(MODULE__ERROR, "ActiveModule::DeactivateCycle() - Called on %s(%u) with current state %s and !abort.",  \
+./src/eve-server/ship/modules/ActiveModule.cpp:767:        _log(MODULE__INFO, "%s - DeactivateCycle() - need target = true and targetID: %u, targSE: %x", \
+./src/eve-server/ship/modules/ActiveModule.cpp:834:             "%s - DeactivateCycle() - Salvager finished on target %s (ID %u).",
+./src/eve-server/ship/modules/ActiveModule.cpp:897:             "%s(%u) ProcessActiveCycle - module is Deactivating, calling DeactivateCycle()",
+./src/eve-server/ship/modules/ActiveModule.cpp:899:        DeactivateCycle();
+./src/eve-server/ship/modules/ActiveModule.cpp:914:        DeactivateCycle();
+./src/eve-server/ship/modules/ActiveModule.cpp:1019:    Deactivate();
+./src/eve-server/ship/modules/ActiveModule.cpp:1096:            Deactivate();
+./src/eve-server/ship/modules/ActiveModule.cpp:1111:            Deactivate();
+./src/eve-server/ship/modules/TurretModule.cpp:62:        Deactivate();
+./src/eve-server/ship/modules/CynoModule.h:27:    virtual void DeactivateCycle(bool abort=false);
+./src/eve-common/EVE_Dungeon.h:74:                EffectBeaconDeactivate = 14,
+./src/eve-common/EVE_Dungeon.h:218: dunTriggerEventEffectBeaconDeactivate,
+./src/eve-server/pos/Structure.cpp:874:void StructureSE::Deactivate(int32 effectID)
+./src/eve-server/ship/modules/SuperWeapon.cpp:140:            Deactivate();
+./src/eve-server/pos/Structure.h:168:    void                        Deactivate(int32 effectID);
+./src/eve-server/npc/EntityService.h:65: * {'messageKey': 'MiningDronesDeactivatedAsteroidEmpty', 'dataID': 17883322, 'suppressable': False, 'bodyID': 259462, 'messageType': 'notify', 'urlAudio': 'wise:/msg_MiningDronesDeactivatedAsteroidEmpty_play', 'urlIcon': '', 'titleID': None, 'messageID': 1168}
+./src/eve-server/npc/EntityService.h:66: * {'messageKey': 'MiningDronesDeactivatedCargoHoldFull', 'dataID': 17883265, 'suppressable': False, 'bodyID': 259442, 'messageType': 'notify', 'urlAudio': 'wise:/msg_MiningDronesDeactivatedCargoHoldFull_play', 'urlIcon': '', 'titleID': None, 'messageID': 1169}
+./src/eve-server/npc/EntityService.h:67: * {'messageKey': 'MiningDronesDeactivatedCargoHoldNowFull', 'dataID': 17883243, 'suppressable': False, 'bodyID': 259434, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1170}
+./src/eve-server/npc/EntityService.h:68: * {'messageKey': 'MiningDronesDeactivatedOutOfRange', 'dataID': 17883208, 'suppressable': False, 'bodyID': 259422, 'messageType': 'notify', 'urlAudio': '', 'urlIcon': '', 'titleID': None, 'messageID': 1171}
+./src/eve-server/missions/EncounterServer.cpp:18:logResults = self.encounterSpawnServer.RequestDeactivateEncounters(encounterList, logResults=True)
+./src/eve-server/qaTools/encounterSpawnServer.cpp:33:    this->Add("RequestDeactivateEncounters", &encounterSpawnServer::RequestDeactivateEncounters);
+./src/eve-server/qaTools/encounterSpawnServer.cpp:64:PyResult encounterSpawnServer::RequestDeactivateEncounters(PyCallArgs& call, PyList* encounterList)
+./src/eve-server/qaTools/encounterSpawnServer.cpp:66:    //  logResults = self.encounterSpawnServer.RequestDeactivateEncounters(encounterList, logResults=True)
+./src/eve-server/qaTools/encounterSpawnServer.cpp:67:    _log(QATOOLS__CALL,  "encounterSpawnServer::Handle_RequestDeactivateEncounters size: %lli", call.tuple->size());
+./src/eve-server/dogmaim/DogmaIMService.cpp:88:    this->Add("Deactivate", static_cast <PyResult(DogmaIMBound::*)(PyCallArgs&, PyInt*, PyWString*)> (&DogmaIMBound::Deactivate));
+./src/eve-server/dogmaim/DogmaIMService.cpp:89:    this->Add("Deactivate", static_cast <PyResult(DogmaIMBound::*)(PyCallArgs&, PyInt*, PyInt*)> (&DogmaIMBound::Deactivate));
+./src/eve-server/dogmaim/DogmaIMService.cpp:831:PyResult DogmaIMBound::Deactivate(PyCallArgs& call, PyInt* itemID, PyInt* effect) {
+./src/eve-server/dogmaim/DogmaIMService.cpp:843:        sLog.Error("DogmaIMBound::Handle_Deactivate()", "%u is not a valid EntityID in this system.", itemID->value());
+./src/eve-server/dogmaim/DogmaIMService.cpp:847:     * 22:24:28 W DogmaIMBound::Handle_Deactivate(): size=2
+./src/eve-server/dogmaim/DogmaIMService.cpp:856:        pSE->GetPOSSE()->Deactivate(effect->value());
+./src/eve-server/dogmaim/DogmaIMService.cpp:859:        pSE->GetContSE()->Deactivate(effect->value());
+./src/eve-server/dogmaim/DogmaIMService.cpp:868:PyResult DogmaIMBound::Deactivate(PyCallArgs& call, PyInt* itemID, PyWString* effectName)
+./src/eve-server/dogmaim/DogmaIMService.cpp:870:    //  return self.statemanager.Deactivate(self.itemID, self.effectName)
+./src/eve-server/dogmaim/DogmaIMService.cpp:871:    //  dogmaLM.Deactivate(itemID, const.effectOnlineForStructures)
+./src/eve-server/dogmaim/DogmaIMService.cpp:873:        sLog.Warning("DogmaIMBound::Handle_Deactivate()", "size=%lu", call.tuple->size());
+./src/eve-server/dogmaim/DogmaIMService.cpp:884:    pClient->GetShip()->Deactivate(itemID->value(), effectName->content());
+./src/eve-server/dogmaim/DogmaIMService.cpp:908:// this one is called from Deactivate() when module is OL
+./src/eve-server/dogmaim/DogmaIMService.cpp:914:    pClient->GetShip()->Deactivate(itemID->value(), sFxDataMgr.GetEffectName(effectID->value()));
+./src/eve-server/qaTools/encounterSpawnServer.h:26:    PyResult RequestDeactivateEncounters(PyCallArgs& call, PyList* encounterList);
+./src/eve-server/system/DestinyManager.cpp:2581:            _log(DESTINY__MOVE_TRACE, "Destiny::SpeedBoost()::Deactivate");
+./src/eve-server/dogmaim/DogmaIMService.h:78:    PyResult Deactivate(PyCallArgs& call, PyInt* itemID, PyInt* effect);
+./src/eve-server/dogmaim/DogmaIMService.h:79:    PyResult Deactivate(PyCallArgs& call, PyInt* itemID, PyWString* effectName);
+./src/eve-server/system/TargetManager.cpp:571:    // iterate thru the map of modules targeting this object, and call Deactivate on each.
+./src/eve-server/system/TargetManager.cpp:609:                module->Deactivate(effect);
+./src/eve-server/system/TargetManager.new:576:    // iterate thru the map of modules targeting this object, and call Deactivate on each.
+./src/eve-server/system/TargetManager.new:596:                cur.second->Deactivate(effect);
+
+---- MATCHES FOR: StopCycle ----
+./src/eve-server/ship/modules/SuperWeapon.h:39:    virtual void StopCycle(bool abort=false);
+./src/eve-server/ship/modules/SuperWeapon.cpp:57:void SuperWeapon::StopCycle(bool abort)
+
+---- MATCHES FOR: SetActive ----
+./src/eve-server/character/Character.cpp:1242:void Character::SetActiveShip(uint32 shipID)
+./src/eve-server/character/Character.cpp:1248:void Character::SetActivePod(uint32 podID)
+./src/eve-server/character/Character.h:345:    void                    SetActiveShip(uint32 shipID);
+./src/eve-server/character/Character.h:346:    void                    SetActivePod(uint32 podID);
+./src/eve-server/ship/modules/MiningLaser.cpp:115:        m_targetSE->SystemMgr()->GetBeltMgr()->SetActive(m_targetSE->SysBubble()->GetID());
+./src/eve-server/Client.cpp:1287:    m_char->SetActiveShip(m_shipId);
+./src/eve-server/Client.cpp:1310:    m_char->SetActivePod(m_pod->itemID());  // is this used?
+./src/eve-server/system/cosmicMgrs/BeltMgr.cpp:116:void BeltMgr::SetActive(uint16 bubbleID, bool active/*true*/)
+./src/eve-server/system/cosmicMgrs/BeltMgr.h:45:    void SetActive(uint16 bubbleID, bool active=true);
+
+---- MATCHES FOR: SetState ----
+./src/eve-server/station/Station.cpp:330: *  dont know what's wrong at this point, but client freaks out and ignores ANY ball data (in SetState) after this.
+./src/eve-common/python/docs/packet_decoding:121:                      [PyString "SetState"]
+./src/eve-server/pos/Structure.cpp:1200:// this only hits when tower is in bubble when SetState is called (at login in tower soi)
+./src/eve-server/exploration/Probes.h:110:    void SetState(uint8 state=Probe::State::Idle)       { m_state = state; }
+./src/eve-server/exploration/Scan.cpp:199:            cur.second->SetState(Probe::State::Inactive);
+./src/eve-common/packets/Destiny.xmlp:139:  <elementDef name="SetState">
+./src/eve-common/packets/Destiny.xmlp:142:      <stringInline value="SetState" />
+./src/eve-common/packets/Destiny.xmlp:160:              <!-- dict of k,v as k= entity ID and v= SetState_DamageState struct -->
+./src/eve-common/EVE_Player.h:29:            Login               = 4000,    // delay before sending SetState when client logs in undocked
+./src/eve-server/Client.cpp:341:    SetStateTimer(Player::State::Login, Player::Timer::Login);
+./src/eve-server/Client.cpp:583:    SetStateSent(false);
+./src/eve-server/Client.cpp:584:    GetShipSE()->DestinyMgr()->SendSetState();
+./src/eve-server/Client.cpp:623:    // SetStateTimer allows it to be processed on the next tick instead of
+./src/eve-server/Client.cpp:625:    SetStateTimer(0);
+./src/eve-server/Client.cpp:875:    _log(PLAYER__AP_TRACE, "Client::SetBallPark():  State: %s, SetState: %s, Beyonce: %s", \
+./src/eve-server/Client.cpp:887:        pShipSE->DestinyMgr()->SendSetState();
+./src/eve-server/Client.cpp:917:    _log(CLIENT__TIMER, "CheckBallparkTimer():  State: %s, SetState: %s, Beyonce: %s, Login: %s", \
+./src/eve-server/Client.cpp:989:     * -> GotoDirection(etc, etc) -> SetState (dmg, ego, ball, slim)
+./src/eve-server/Client.cpp:994:    SetStateTimer(Player::State::Undock, Player::Timer::Undock);
+./src/eve-server/Client.cpp:1125:    //SetStateTimer(Player::State::Board, Player::Timer::Board);
+./src/eve-server/Client.cpp:1201:    //SetStateTimer(Player::State::Board, Player::Timer::Board);
+./src/eve-server/Client.cpp:1244:    //SetStateTimer(Player::State::Killed, Player::Timer::Killed);
+./src/eve-server/Client.cpp:1450:    SetStateTimer(Player::State::Jump, Player::Timer::Jumping);
+./src/eve-server/Client.cpp:1471:    SetStateTimer(Player::State::DriveJump, Player::Timer::Jumping);
+./src/eve-server/Client.cpp:1496:    SetStateTimer(Player::State::WormholeJump, Player::Timer::Jumping);
+./src/eve-server/Client.cpp:1642:void Client::SetStateTimer( int8 state, uint32 time/*Player::Timer::Default*/)
+./src/eve-server/Client.cpp:2206:void Client::QueueDestinyUpdate(PyTuple **update, bool DoPackage /*false*/, bool IsSetState /*false*/) {
+./src/eve-server/Client.cpp:2214:        if (IsSetState) {
+./src/eve-server/admin/debug_commands.cpp:389:             "IsSetStateSent: %u<br>", //27
+./src/eve-server/admin/debug_commands.cpp:391:                pClient->IsInvul(), pClient->IsLogin(),  pClient->IsUndock(), pClient->HasBeyonce(), pClient->IsBubbleWait(), pClient->IsSetStateSent()
+./src/eve-server/system/DestinyManager.cpp:2440:    pClient->SetStateTimer(Player::State::Dock, sConfig.world.StationDockDelay *1000); // default @ 4sec();
+./src/eve-server/system/DestinyManager.cpp:3328:void DestinyManager::SendSetState() const {
+./src/eve-server/system/DestinyManager.cpp:3336:            "Destiny::SendSetState() Called for Ship:%s(%u) Pilot:%s(%u)",
+./src/eve-server/system/DestinyManager.cpp:3363:    SetState ss;
+./src/eve-server/system/DestinyManager.cpp:3372:            "DestinyManager::SendSetState()",
+./src/eve-server/system/DestinyManager.cpp:3373:            "Destiny::SendSetState() the player isn't in a system bubble! Aborting attempt to send state."
+./src/eve-server/system/DestinyManager.cpp:3379:    mySE->SystemMgr()->MakeSetState(mySE->SysBubble(), ss);
+./src/eve-server/system/DestinyManager.cpp:3386:    mySE->GetPilot()->SetStateSent(true);
+./src/eve-server/system/DestinyManager.h:173:    void SendSetState() const;
+./src/eve-server/ship/BeyonceService.cpp:63:    if (!call.client->IsSetStateSent())
+./src/eve-server/ship/BeyonceService.cpp:115:    if (client->IsLogin() and !client->IsSetStateSent())
+./src/eve-server/ship/BeyonceService.cpp:797:    call.client->SetStateSent(false);
+./src/eve-server/ship/BeyonceService.cpp:798:    pDestiny->SendSetState();
+./src/eve-server/system/SystemManager.h:45:class SetState;
+./src/eve-server/system/SystemManager.h:133:    /* this is to send new global ball added to system AFTER SetState has been sent */
+./src/eve-server/system/SystemManager.h:135:    void MakeSetState(const SystemBubble* pBubble, SetState& into) const;
+./src/eve-server/admin/SystemCommands.h:24:         "- Sets Current Position according to Server's DestinyManager, then Sends Bubble AddBalls and Destiny SetState. (resets spaceview with current server data)" )
+./src/eve-server/admin/SystemCommands.h:26:         "- Sends DoDestinyUpdate SetState." )
+./src/eve-server/admin/SystemCommands.cpp:79:    pClient->SetStateSent(false);
+./src/eve-server/admin/SystemCommands.cpp:80:    pClient->GetShipSE()->DestinyMgr()->SendSetState();
+./src/eve-server/admin/SystemCommands.cpp:961:    pClient->SetStateSent(false);
+./src/eve-server/admin/SystemCommands.cpp:963:    _log(COMMAND__MESSAGE, "SystemCommands::SendState() - sending SetState");
+./src/eve-server/admin/SystemCommands.cpp:964:    pClient->GetShipSE()->DestinyMgr()->SendSetState();
+./src/eve-server/system/SystemBubble.h:36:class SetState;
+./src/eve-server/system/SystemBubble.h:140:    /* for SetState */
+./src/eve-server/system/SystemManager.cpp:1326:void SystemManager::MakeSetState(const SystemBubble* pBubble,  SetState& into) const {
+./src/eve-server/system/KeeperService.cpp:271:    call.client->SetStateSent(false);
+./src/eve-server/system/KeeperService.cpp:272:    call.client->GetShipSE()->DestinyMgr()->SendSetState();
+./src/eve-server/system/KeeperService.cpp:318:    call.client->SetStateSent(false);
+./src/eve-server/system/KeeperService.cpp:319:    call.client->GetShipSE()->DestinyMgr()->SendSetState();
+./src/eve-server/Client.h:218:    void SetStateTimer(int8 state, uint32 time=Player::Timer::Default);     // send time=0 to disable
+./src/eve-server/Client.h:246:    bool IsSetStateSent()                               { return m_setStateSent; }
+./src/eve-server/Client.h:257:    void SetStateSent(bool set=false)                   { m_setStateSent = set; }
+./src/eve-server/Client.h:301:    void QueueDestinyUpdate(PyTuple** update, bool DoPackage=false, bool IsSetState=false);
+./src/eve-server/Client.h:402:    Timer m_ballparkTimer;   // this is to properly send SetState data after a delay (cant do it correctly otherwise)
+./src/eve-server/system/SystemBubble.cpp:523:     *    SystemManager::MakeSetState()   --for player entering new system

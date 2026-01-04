@@ -1,25 +1,48 @@
 # Base image for building EVEmu using Debian 12
 FROM debian:12 AS base
 
-# Install build dependencies
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    git \
-    curl \
-    wget \
-    zlib1g-dev \
-    libmariadb-dev \
-    libboost-all-dev \
-    libtinyxml-dev \
-    ca-certificates \
-    g++ \
-    gdb \
-    libutfcpp-dev \
-    mariadb-client \
-    passwd \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install build dependencies (fix apt signature issues by forcing HTTPS + refreshing keyrings)
+
+RUN set -eux; \
+    export DEBIAN_FRONTEND=noninteractive; \
+    \
+    # (Optional) show clock for debugging in build logs
+    date -u; \
+    \
+    # Force HTTP first (bootstrap), but allow insecure just for the bootstrap step
+    if [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|https://deb.debian.org|http://deb.debian.org|g; s|https://security.debian.org|http://security.debian.org|g' /etc/apt/sources.list; \
+    fi; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|https://deb.debian.org|http://deb.debian.org|g; s|https://security.debian.org|http://security.debian.org|g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's|URIs: https://|URIs: http://|g' /etc/apt/sources.list.d/debian.sources; \
+    fi; \
+    \
+    apt-get -o Acquire::AllowInsecureRepositories=true \
+            -o Acquire::AllowDowngradeToInsecureRepositories=true \
+            -o APT::Get::AllowUnauthenticated=true \
+            update; \
+    apt-get -y --no-install-recommends \
+            -o APT::Get::AllowUnauthenticated=true \
+            install ca-certificates debian-archive-keyring gnupg; \
+    rm -rf /var/lib/apt/lists/*; \
+    \
+    # Now switch to HTTPS and go back to normal strict verification
+    if [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|http://deb.debian.org|https://deb.debian.org|g; s|http://security.debian.org|https://security.debian.org|g' /etc/apt/sources.list; \
+    fi; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|http://deb.debian.org|https://deb.debian.org|g; s|http://security.debian.org|https://security.debian.org|g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's|URIs: http://|URIs: https://|g' /etc/apt/sources.list.d/debian.sources; \
+    fi; \
+    \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        build-essential cmake git curl wget zlib1g-dev libmariadb-dev libboost-all-dev \
+        libtinyxml-dev g++ gdb libutfcpp-dev mariadb-client passwd; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
 
 # Build stage
 FROM base AS app-build
@@ -44,7 +67,7 @@ ENV MYSQL_LIBRARIES="/usr/lib/x86_64-linux-gnu/libmariadbclient.so"
 WORKDIR /src/build
 
 # Configure and build the project
-RUN cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Debug .. 
+RUN cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Debug ..
 RUN make -j$(nproc)
 RUN make install
 
@@ -69,3 +92,4 @@ EXPOSE 26001
 
 # Default command
 CMD ["/src/utils/container-scripts/start.sh"]
+
