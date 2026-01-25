@@ -493,15 +493,13 @@ uint32 ShipItem::AddItemByFlag(EVEItemFlags flag, InventoryItemRef iRef, Client*
         return 0;
 
     if (flag == flagNone) {
-        // make error.  nothing at this point should be "autoFit"
-        codelog(SHIP__ERROR, "ShipItem::AddItem() - flag = flagNone.");
+        codelog(SHIP__ERROR, "ShipItem::AddItemByFlag() - flag = flagNone.");
         if (sConfig.debug.IsTestServer)
             EvE::traceStack();
-        flag = flagCargoHold;   //default to cargo (cause this is a ship)
+        flag = flagCargoHold;
     }
-    // CantFitModuleToThatShip
-    // u'CantFitModuleToThatShipBody'}(u"You can't fit {item} to {ship}", None, {u'{ship}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'ship'}, u'{item}': {'conditionalValues': [], 'variableType': 10, 'propertyName': None, 'args': 0, 'kwargs': {}, 'variableName': 'item'}})
 
+    // Module-slot handling (charges/modules/subsystems)
     if (IsModuleSlot(flag)) {
         if (iRef->categoryID() == EVEDB::invCategories::Charge) {
             iRef->ChangeSingleton(false, false);
@@ -513,25 +511,41 @@ uint32 ShipItem::AddItemByFlag(EVEItemFlags flag, InventoryItemRef iRef, Client*
         } else if (iRef->categoryID() == EVEDB::invCategories::Module) {
             ModuleItemRef mRef = ModuleItemRef::StaticCast(iRef);
             mRef->ChangeSingleton(true, false);
-            // rigs are classed in the module category.  check here and call appropriate method as needed.
+
             if (IsRigSlot(flag)) {
                 if (!m_ModuleManager->InstallRig(mRef, flag))
                     return 0;
-            } else if (!m_ModuleManager->AddModule(mRef, flag))
-                return 0;
+            } else {
+                if (!m_ModuleManager->AddModule(mRef, flag))
+                    return 0;
+            }
         } else if (iRef->categoryID() == EVEDB::invCategories::Subsystem) {
             ModuleItemRef mRef = ModuleItemRef::StaticCast(iRef);
-            //mRef->SetOnline(true);  // is this needed here?
             mRef->ChangeSingleton(true, false);
             if (!m_ModuleManager->InstallSubSystem(mRef, flag))
                 return 0;
         }
-        //m_ModuleManager->UpdateModules(flag);
     }
 
+    // IMPORTANT:
+    // In this codebase InventoryItem::Move() expects (flag, locationID, notify)
+    // Your log "10 is invalid location" is exactly what happens when args are swapped.
     iRef->Move(m_itemID, flag, true);
+
+    // Verify post-move so failures become visible
+    if (iRef->locationID() != m_itemID || iRef->flag() != flag) {
+        codelog(SHIP__ERROR,
+            "ShipItem::AddItemByFlag() - Move verification failed for item %u (type %u). "
+            "Expected location %u flag %u, got location %u flag %u.",
+            iRef->itemID(), iRef->typeID(),
+            m_itemID, (uint32)flag,
+            iRef->locationID(), (uint32)iRef->flag());
+        return 0;
+    }
+
     return iRef->itemID();
 }
+
 
 void ShipItem::RemoveItem(InventoryItemRef iRef)
 {

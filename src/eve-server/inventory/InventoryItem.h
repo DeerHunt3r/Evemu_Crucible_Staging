@@ -121,7 +121,18 @@ public:
     void                    ChangeOwner(uint32 new_owner, bool notify=false);
     // remove item from old location, add to new location and (optionally) notify client of changes
     // will bcast to corp for item update (incomplete)
-    void                    Move(uint32 new_location=locTemp, EVEItemFlags flag=flagNone, bool notify=false);
+   
+   
+   
+    // Canonical Move: (locationID, flag, notify)
+    void                    Move(uint32 new_location = locTemp, EVEItemFlags flag = flagNone, bool notify = false);
+
+    // Safety overload: supports accidental swapped-argument call sites: (flag, locationID, notify)
+    // This prevents invalid-location warnings like "10 is invalid location" and makes both call styles behave correctly.
+    void                    Move(EVEItemFlags flag, uint32 new_location, bool notify = false);
+   
+   
+   
     // same as Move() but xfer ownership also
     // will bcast to corp for item update (incomplete)
     void                    Donate(uint32 new_owner=ownerSystem, uint32 new_location=locTemp, EVEItemFlags new_flag=flagNone, bool notify=true);

@@ -729,30 +729,60 @@ void InventoryItem::Donate(uint32 new_owner/*ownerSystem*/, uint32 new_location/
         }
     }
 }
+// InventoryItem.cpp  (drop-in function)
 
-void InventoryItem::Move(uint32 new_location/*locTemp*/, EVEItemFlags new_flag/*flagNone*/, bool notify/*false*/) {
+void InventoryItem::Move(EVEItemFlags flag, uint32 new_location, bool notify/*false*/)
+{
+    // Forward to canonical signature.
+    Move(new_location, flag, notify);
+}
+
+void InventoryItem::Move(uint32 new_location/*locTemp*/, EVEItemFlags new_flag/*flagNone*/, bool notify/*false*/)
+{
     if ((new_location == m_data.locationID) and (new_flag == m_data.flag) and !notify)
         return; //nothing to do...
 
     InventoryItemRef iRef(nullptr);
-    uint32 old_location = m_data.locationID;
-    EVEItemFlags old_flag = m_data.flag;
+    const uint32 old_location = m_data.locationID;
+    const EVEItemFlags old_flag = m_data.flag;
 
-    if ((new_location != m_data.locationID) // diff container
-    or ((new_location == m_data.locationID) // or same container
-        and (new_flag != m_data.flag))) {   //  but different flag
-        // remove from current location
-        if (IsValidLocationID(m_data.locationID)) {
-            iRef = sItemFactory.GetItemRef(m_data.locationID);
-            if (iRef.get() != nullptr) {
-                iRef->RemoveItem(InventoryItemRef(this));
-            } else {
-                _log(ITEM__ERROR, "II::Move() - Cant find location %u containing %s.", m_data.locationID, m_data.name.c_str());
+    // In this codebase locTemp is a staging location (commonly numeric 10).
+    // It is not a real container inventory and MUST NOT participate in RemoveItem/AddItem bookkeeping.
+    const bool oldIsTemp = (old_location == locTemp) || (old_location == 10);
+    const bool newIsTemp = (new_location == locTemp) || (new_location == 10);
+
+    const bool containerChanged = (new_location != old_location);
+    const bool flagChanged = (new_flag != old_flag);
+
+    if (containerChanged || (flagChanged && !containerChanged))
+    {
+        // remove from current location (skip if temp)
+        if (!oldIsTemp)
+        {
+            if (IsValidLocationID(old_location))
+            {
+                iRef = sItemFactory.GetItemRef(old_location);
+                if (iRef.get() != nullptr)
+                {
+                    iRef->RemoveItem(InventoryItemRef(this));
+                }
+                else
+                {
+                    _log(ITEM__ERROR, "II::Move() - Cant find location %u containing %s.", old_location, m_data.name.c_str());
+                }
             }
-        } else {
-            _log(ITEM__WARNING, "II::Move()::Remove() - %u is invalid location.", m_data.locationID);
+            else
+            {
+                _log(ITEM__WARNING, "II::Move()::Remove() - %u is invalid location.", old_location);
+            }
         }
-    } else {
+        else
+        {
+            _log(ITEM__TRACE, "II::Move()::Remove() - old location is temp (%u); skipping container remove.", old_location);
+        }
+    }
+    else
+    {
         _log(ITEM__TRACE, "II::Move()::Remove() - same same same.");
     }
 
@@ -760,32 +790,48 @@ void InventoryItem::Move(uint32 new_location/*locTemp*/, EVEItemFlags new_flag/*
     m_data.flag = new_flag;
     m_data.locationID = new_location;
 
-    if ((old_location != m_data.locationID) // diff container
-    or ((old_location == m_data.locationID) // or same container
-        and (old_flag != m_data.flag))) {   //  but different flag
-        // add to new location
-        if (IsValidLocationID(m_data.locationID)) {
-            iRef = sItemFactory.GetItemRef(m_data.locationID);
-            if (iRef.get() != nullptr) {
-                iRef->AddItem(InventoryItemRef(this));
-            } else {
-                _log(ITEM__ERROR, "II::Move() - Cant find location %u to add %s.", m_data.locationID, m_data.name.c_str());
+    if (containerChanged || (flagChanged && !containerChanged))
+    {
+        // add to new location (skip if temp)
+        if (!newIsTemp)
+        {
+            if (IsValidLocationID(new_location))
+            {
+                iRef = sItemFactory.GetItemRef(new_location);
+                if (iRef.get() != nullptr)
+                {
+                    iRef->AddItem(InventoryItemRef(this));
+                }
+                else
+                {
+                    _log(ITEM__ERROR, "II::Move() - Cant find location %u to add %s.", new_location, m_data.name.c_str());
+                }
             }
-        } else {
-            _log(ITEM__WARNING, "II::Move()::Add() - %u is invalid location.", m_data.locationID);
+            else
+            {
+                _log(ITEM__WARNING, "II::Move()::Add() - %u is invalid location.", new_location);
+            }
         }
-    } else {
+        else
+        {
+            _log(ITEM__TRACE, "II::Move()::Add() - new location is temp (%u); skipping container add.", new_location);
+        }
+    }
+    else
+    {
         _log(ITEM__TRACE, "II::Move()::Add() - same same same.");
     }
 
     if (IsTempItem(m_itemID) or IsNPC(m_itemID))
         return;
 
-    if ((m_data.locationID == locRAMItems || IsValidLocationID(m_data.locationID)) and (!m_delete))
+    // Persist location changes, but NEVER persist temp locations.
+    if ((m_data.locationID == locRAMItems || IsValidLocationID(m_data.locationID)) and (!m_delete) && !newIsTemp)
         ItemDB::UpdateLocation(m_itemID, m_data.locationID, m_data.flag);
 
     //notify about the changes.
-    if (notify) {
+    if (notify)
+    {
         std::map<int32, PyRep *> changes;
         if (m_data.locationID != old_location)
             changes[Inv::Update::Location] = new PyInt(old_location);
@@ -939,39 +985,31 @@ bool InventoryItem::AlterQuantity(int32 qty, bool notify/*false*/) {
     return SetQuantity(new_qty, notify);
 }
 
+
 bool InventoryItem::SetQuantity(int32 qty, bool notify/*false*/, bool deleteOnZero/*true*/) {
-    //if an object is singleton, there is only one, and it shouldn't be able to alter qty
+    // if an object is singleton, there is only one, and it shouldn't be able to alter qty
     if (m_data.singleton) {
-        _log(ITEM__ERROR, "II::SetQuantity() - %s(%u): Failed to set quantity %i; the items singleton bit is set", m_data.name.c_str(), m_itemID, qty);
-        // make player error msg here.....
+        _log(ITEM__ERROR, "II::SetQuantity() - %s(%u): Failed to set quantity %i; the items singleton bit is set",
+             m_data.name.c_str(), m_itemID, qty);
         return false;
     }
+
     int32 old_qty = m_data.quantity;
     m_data.quantity = qty;
 
-    /* this isnt needed.  quantity has hard limit.
-    if (m_data.quantity > maxEveItem) {
-        codelog(ITEM__ERROR, "II::SetQuantity() - %s(%u): quantity overflow", m_data.name.c_str(), m_itemID);
-        m_data.quantity = maxEveItem -1;
-        if (IsCharacterID(m_data.ownerID)) {
-            Client* pClient = sEntityList.FindClientByCharID(m_data.ownerID);
-            if (pClient != nullptr)
-                pClient->SendInfoModalMsg("Your %s has reached quantity limits of this server.<br>If you try to add any more to this stack, you will lose items.  This is your only warning.", m_data.name.c_str());
-        }
-    } */
-
-    if (notify or (IsCargoHoldFlag(m_data.flag) and (m_type.categoryID() == EVEDB::invCategories::Charge))) {
-        std::map<int32, PyRep *> changes;
+    if (notify || (IsCargoHoldFlag(m_data.flag) && (m_type.categoryID() == EVEDB::invCategories::Charge))) {
+        std::map<int32, PyRep*> changes;
         changes[Inv::Update::StackSize] = new PyInt(old_qty);
-        SendItemChange(m_data.ownerID, changes); //changes is consumed
+        SendItemChange(m_data.ownerID, changes);  // changes is consumed
     }
 
-    // how are we gonna do modules owned by corp here???
-    if (IsFittingSlot(m_data.flag) and (m_type.categoryID() == EVEDB::invCategories::Charge))
-        if (IsCharacterID(m_data.ownerID)/* or IsPlayerCorp(m_data.ownerID)*/) {
+    // Update charge quantity attribute when fitted (client needs this, esp. in space)
+    if (IsFittingSlot(m_data.flag) && (m_type.categoryID() == EVEDB::invCategories::Charge)) {
+        if (IsCharacterID(m_data.ownerID)) {
             Client* pClient = sEntityList.FindClientByCharID(m_data.ownerID);
             SetAttribute(AttrQuantity, m_data.quantity, pClient == nullptr ? notify : pClient->IsInSpace());
         }
+    }
 
     if (m_data.quantity < 1) {
         if (deleteOnZero)
@@ -984,6 +1022,9 @@ bool InventoryItem::SetQuantity(int32 qty, bool notify/*false*/, bool deleteOnZe
 
     return true;
 }
+
+
+
 
 bool InventoryItem::SetFlag(EVEItemFlags flag, bool notify/*false*/) {
     if (m_data.flag == flag)
@@ -1003,34 +1044,42 @@ bool InventoryItem::SetFlag(EVEItemFlags flag, bool notify/*false*/) {
     return true;
 }
 
-bool InventoryItem::ChangeSingleton(bool singleton, bool notify/*false*/) {
-    if (singleton == m_data.singleton)
-        return true;    //nothing to do...
+bool InventoryItem::ChangeSingleton(bool singleton, bool notify/*true*/)
+{
+    // No change
+    if (isSingleton() == singleton)
+        return true;
 
-    bool old_singleton(m_data.singleton);
-    m_data.singleton = singleton;
+    // Update backing data (this tree stores singleton in m_data)
+    m_data.singleton = singleton ? 1 : 0;
 
-    //verify quantity is -1 for singletons
-    if (m_data.singleton)
-        if (m_data.quantity > 1) {
-            _log(ITEM__WARNING, "%s(%u) is changing singleton to %s and qty is currently %i", \
-                    m_data.name.c_str(), m_itemID, singleton?"On":"Off", m_data.quantity);
-            m_data.quantity = -1;
-        }
-
+    // Persist if configured (UpdateSingleton() does NOT exist in this codebase)
     if (sConfig.world.saveOnUpdate)
         SaveItem();
 
+    // Notify client via standard item-change payload
     if (notify) {
-        std::map<int32, PyRep *> changes;
-        changes[Inv::Update::Singleton] = new PyInt(old_singleton);
-        SendItemChange(m_data.ownerID, changes); //changes is consumed
+        std::map<int32, PyRep*> changes;
+        changes[Inv::Update::Singleton] = new PyInt(m_data.singleton);
+
+        // NOTE: locationID() is the correct accessor in this tree (not m_locationID)
+        SendItemChange(locationID(), changes);
     }
 
-    // must update volume when singleton (packaged state) changes for (mostly) ship items.
-    SetAttribute(AttrVolume, GetPackagedVolume(), notify);
+    // Packaged/unpackaged volume handling
+    // Singleton generally implies "assembled", but in this codebase the intent here
+    // is: singleton => packaged volume; otherwise => type volume.
+    if (singleton) {
+        SetAttribute(AttrVolume, GetPackagedVolume(), notify);
+    } else {
+        SetAttribute(AttrVolume, m_type.volume(), notify);
+    }
+
     return true;
 }
+
+
+
 
 void InventoryItem::ChangeOwner(uint32 new_owner, bool notify/*false*/) {
     if (new_owner == m_data.ownerID)
