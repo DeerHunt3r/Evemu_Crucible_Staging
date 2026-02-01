@@ -123,6 +123,7 @@ Client::Client(EVEServiceManager& services, EVETCPConnection** con)
     m_moveSystemID = 0;
     m_skillTimer = 0;
     m_dockStationID = 0;
+    m_pendingDock = false;
 
     m_lpMap.clear();
     m_channels.clear();
@@ -936,15 +937,49 @@ void Client::MoveToPosition(const GPoint &pt) {
         pShipSE->DestinyMgr()->Halt();
 }
 
-void Client::DockToStation() {
+void Client::RequestDock(uint32 stationID)
+{
+    // Persist intent immediately. Even if the first AttemptDockOperation() throws
+    // DockingApproach (out of range), we keep intent until docking succeeds.
+    m_dockStationID = stationID;
+    m_pendingDock = true;
+
+    _log(AUTOPILOT__TRACE, "RequestDock() - %s(%u) requested dock at station %u (pendingDock=true)",
+         GetName(), GetCharacterID(), stationID);
+}
+
+void Client::CancelDockRequest()
+{
+    _log(AUTOPILOT__TRACE, "CancelDockRequest() - %s(%u) cancelling dock request (station was %u)",
+         GetName(), GetCharacterID(), m_dockStationID);
+
+    m_pendingDock = false;
+    // Keep m_dockStationID intact or clear it? On Crucible, intent is what matters.
+    // Clearing the station ID can hide useful debugging context, so we only clear intent.
+}
+
+
+void Client::DockToStation()
+{
+    ClearPendingDock();
+
+    if ((pShipSE == nullptr) || (pShipSE->DestinyMgr() == nullptr)) {
+        _log(CLIENT__ERROR, "%s(%u): DockToStation() - ShipSE or DestinyMgr is null.", GetName(), m_char->itemID());
+        return;
+    }
+
+    // Dock the ship entity first (server-side state)
     pShipSE->Dock();
-    // ap cleared on client side when docking.
+
+    // AP is cleared client-side when docking on live.
     m_autoPilot = false;
     m_setStateSent = false;
-    m_clientState = Player::State::Idle;
-    _log(AUTOPILOT__TRACE, "DockToStation()() - m_clientState set to Idle");
+
+    // Tell Destiny we accepted docking (client will stop expecting further movement updates)
     pShipSE->DestinyMgr()->DockingAccepted();
-    m_bubbleWait = true;     // deny client processing of subsquent destiny msgs
+
+    // Deny further destiny processing while the view transitions
+    m_bubbleWait = true;
 
     //Check if player is in pod and have no ships in hangar, in which case they get a rookie ship for free
     //  on live, SCC sends mail about the loss of the players ship, and offers a shiny, new, fully-fitted ship as replacement.  we dont....yet
@@ -953,7 +988,7 @@ void Client::DockToStation() {
         if (sConfig.server.NoobShipCheck) {
             StationItemRef sRef = m_system->GetStationFromInventory(m_dockStationID);
             if (sRef.get() == nullptr) {
-                _log(CLIENT__ERROR, "%s(%u): DockToStation() - Station %u not found in inventory of %s(%u).", \
+                _log(CLIENT__ERROR, "%s(%u): DockToStation() - Station %u not found in inventory of %s(%u).",
                         GetName(), m_char->itemID(), m_dockStationID, m_system->GetName(), m_system->GetID());
             } else if (!sRef->HasShip(this)) {   // need to get hangar items (flagHangar) by owner
                 SpawnNewRookieShip(m_dockStationID);
@@ -963,13 +998,27 @@ void Client::DockToStation() {
         }
     }
 
+    // Move character + ship into the station (this destroys ShipSE internally)
     MoveToLocation(m_dockStationID, NULL_ORIGIN);
 
     SetSessionTimer();
     m_ship->SetDocked();
+
+    // >>> CRITICAL FIX <<<
+    // Docking MUST send a SessionChangeNotification (locationid/stationid/etc).
+    // Without this, the client can remain in space view even though server-side items moved.
+    UpdateSession();
+    SendSessionChange();
+
+    // Now we're safely idle (in-station processing path will short-circuit in ProcessClient)
+    m_clientState = Player::State::Idle;
+    _log(AUTOPILOT__TRACE, "DockToStation() - dock complete, session change sent, m_clientState set to Idle");
 }
 
+
 void Client::UndockFromStation() {
+    CancelDockRequest();
+    
     if (m_TS != nullptr) {
         this->services().Lookup <TradeService>("trademgr")->CancelTrade(this);
     }
@@ -2242,9 +2291,19 @@ void Client::QueueDestinyUpdate(PyTuple **update, bool DoPackage /*false*/, bool
     }
 }
 
-
 void Client::_SendQueuedUpdates()
 {
+    // If we are in a station there is no ballpark. Drop any queued destiny packets
+    // that may have been queued just before a session change (ex: docking).
+    if (sDataMgr.IsStation(m_locationID)) {
+        if (m_destinyEventQueue != nullptr && m_destinyEventQueue->size() > 0)
+            m_destinyEventQueue->clear();
+        if (m_destinyUpdateQueue != nullptr && m_destinyUpdateQueue->size() > 0)
+            m_destinyUpdateQueue->clear();
+        m_bubbleWait = false;
+        return;
+    }
+
     // Nothing queued? Nothing to do.
     if (m_destinyUpdateQueue == nullptr || m_destinyEventQueue == nullptr)
         return;
@@ -2293,8 +2352,7 @@ void Client::_SendQueuedUpdates()
             if (rep == nullptr)
                 continue;
 
-            // The queue contains event tuples like: ("OnSpecialFX", argsTuple)
-            // OnMultiEvent expects a LIST of these tuples.
+            // OnMultiEvent expects a LIST of event tuples.
             PyIncRef(rep);
             evList->AddItem(rep);
         }

@@ -575,6 +575,16 @@ PyResult BeyonceBound::CmdWarpToStuff(PyCallArgs &call, PyString* type, PyRep* i
     call.client->SetUndock(false);
 
     distance += (call.client->GetShipSE()->GetRadius() * 2); // add ship diameter to distance
+
+    // Crucible-style Dock hotkey behavior:
+    // The client may issue CmdWarpToStuff for a station when the user presses Dock (D) from far away.
+    // Persist dock intent here so docking completes automatically after warp/approach without requiring a second keypress.
+    if (pSE != nullptr && pSE->IsStationSE()) {
+        call.client->RequestDock(toID);
+        _log(AUTOPILOT__TRACE, "CmdWarpToStuff() - station warp detected, persisted dock intent for station=%u pending=%s",
+             toID, (call.client->IsPendingDock() ? "true" : "false"));
+    }
+
     pDestiny->WarpTo(warpToPoint, distance);
 
     return PyStatic.NewNone();
@@ -645,11 +655,16 @@ PyResult BeyonceBound::CmdStop(PyCallArgs &call) {
     }
 
     call.client->SetUndock(false);
+
+    // Do NOT cancel pending docking here.
+    // Crucible client may issue stop-like commands during/after warp settle,
+    // and clearing docking intent causes the "warp in then forget to dock" bug.
     call.client->SetAutoPilot(false);
 
     pDestiny->Stop();
 
     return PyStatic.NewNone();
+
 }
 
 // CmdTurboDock (in client code)
@@ -679,10 +694,16 @@ PyResult BeyonceBound::CmdDock(PyCallArgs &call, PyInt* celestialID, PyInt* ship
     }
 
     //  this sets m_dockStationID for radius checks and other things
-    call.client->SetDockStationID( celestialID->value() );
+    call.client->RequestDock(celestialID->value());
+    _log(AUTOPILOT__TRACE, "CmdDock() - requested dock station=%u pending=%s",
+         celestialID->value(), call.client->IsPendingDock() ? "true" : "false");
 
-    /* return error msg from this call, if applicable, else nodeid and timestamp */
-    return pDestiny->AttemptDockOperation();
+    // Start docking flow. This may throw DockingApproach if out of range.
+    pDestiny->AttemptDockOperation();
+
+    // Crucible-style: return the bound object ID for the call (consistent with other navigation actions).
+    return this->GetOID();
+
 }
 
 PyResult BeyonceBound::CmdStargateJump(PyCallArgs &call, PyInt* fromStargateID, PyInt* toStargateID, PyInt* shipID) {

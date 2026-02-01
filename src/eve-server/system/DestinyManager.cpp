@@ -128,24 +128,88 @@ DestinyManager::~DestinyManager() {
 }
 
 // this is called once per tic by SystemEntity::Process()
-void DestinyManager::Process() {
-    double profileStartTime(GetTimeUSeconds());
+void DestinyManager::Process()
+{
+    // This is called once per tick by SystemEntity::Process().
+    // Keep this function conservative: do not invent new engine-wide APIs, and avoid touching
+    // core Destiny timing semantics beyond the docking completion hook (Option A).
 
-    if (mySE->IsFrozen()) {
+    const double profileStartTime = GetTimeUSeconds();
+
+    // If the ball is frozen, make sure we stop moving and do not process state.
+    if (mySE != nullptr && mySE->IsFrozen()) {
         Halt();
         return;
     }
 
-    //check for and process Destiny::Ball::State changes.
+    // Check for and process Destiny::Ball::State changes.
     if (m_ticAlign) {
         m_ticAlign = false;
-        // send movement packet this tic and begin movement
+        // Send movement packet this tick and begin movement.
         //SendMovementPacket();
     }
 
     ProcessState();
 
-    if (sConfig.debug.UseProfiling)
+    // --------------------------------------------------------------------
+    // Docking completion hook (Option A)
+    //
+    // Crucible client behavior:
+    // - The user can click "Dock" while far away.
+    // - The client will warp/approach and may NOT re-issue CmdDock once in range.
+    //
+    // Server side fix:
+    // - Persist a pending-dock intent on the Client.
+    // - Once the ship is no longer warping and is within 2500m (edge-to-edge),
+    //   complete the docking flow using the existing AttemptDockOperation().
+    // --------------------------------------------------------------------
+   if (mySE != nullptr) {
+    Client* pilot = mySE->GetPilot();
+    if (pilot != nullptr && pilot->IsPendingDock()) {
+
+        const uint32 stationID = pilot->GetDockStationID();
+
+        // If we are still warping, keep intent and wait.
+        if (IsWarping()) {
+            _log(DESTINY__TRACE, "DockHook: pending dock while warping for %s(%u), station=%u",
+                 mySE->GetName(), mySE->GetID(), stationID);
+        } else {
+            if (stationID != 0 && sDataMgr.IsStation(stationID)) {
+                SystemEntity* stationSE = mySE->SystemMgr()->GetSE(stationID);
+                if (stationSE != nullptr) {
+                    const double centerDist = mySE->GetPosition().distance(stationSE->GetPosition());
+                    const double dist = centerDist - mySE->GetRadius() - stationSE->GetRadius();
+
+                    if (dist <= 2500.0) {
+                        _log(DESTINY__TRACE,
+                             "DockHook: in-range dist=%.2f, triggering AttemptDockOperation for %s(%u) station=%u",
+                             dist, mySE->GetName(), mySE->GetID(), stationID);
+
+                        // Do NOT clear pending dock here.
+                        // AttemptDockOperation() clears it only after it successfully arms docking.
+                        AttemptDockOperation();
+                    } else {
+                        // Out of range after warp: begin approach automatically.
+                        // Without this, the player can land at 3-10km and never dock unless they press Dock again.
+                        if (!IsMoving()) {
+                            _log(DESTINY__TRACE,
+                                 "DockHook: out-of-range dist=%.2f, beginning approach for %s(%u) station=%u",
+                                 dist, mySE->GetName(), mySE->GetID(), stationID);
+                            AlignTo(stationSE);
+                        }
+                    }
+                } else {
+                    _log(DESTINY__TRACE,
+                         "DockHook: stationSE not found yet for %s(%u), station=%u (keeping pending dock)",
+                         mySE->GetName(), mySE->GetID(), stationID);
+                }
+            }
+        }
+    }
+}
+
+
+if (sConfig.debug.UseProfiling)
         sProfiler.AddTime(Profile::destiny, GetTimeUSeconds() - profileStartTime);
 }
 
@@ -2412,36 +2476,63 @@ void DestinyManager::SetUndockSpeed() {
     SendDestinyUpdate(updates);
 }
 
-PyResult DestinyManager::AttemptDockOperation() {
-    Client *pClient = mySE->GetPilot();
-    uint32 stationID = pClient->GetDockStationID();
-    SystemEntity *station = mySE->SystemMgr()->GetSE(stationID);
+PyResult DestinyManager::AttemptDockOperation()
+{
+    Client* pClient = mySE->GetPilot();
+    if (pClient == nullptr)
+        return PyStatic.NewNone();
+
+    const uint32 stationID = pClient->GetDockStationID();
+    SystemEntity* station = mySE->SystemMgr()->GetSE(stationID);
 
     if (station == nullptr) {
-        codelog(CLIENT__ERROR, "%s: Station %u not found.", pClient->GetName(), stationID);
+        codelog(CLIENT__ERROR, "%s: AttemptDockOperation() - Station %u not found.", pClient->GetName(), stationID);
         pClient->SendErrorMsg("Station Not Found, Docking Aborted.");
+        // If we can’t resolve the station entity, don’t keep retrying forever.
+        pClient->ClearPendingDock();
         return PyStatic.NewNone();
     }
 
-    //get the station Docking Perimiter
+    // Edge-to-edge distance (Crucible docking uses 2500m perimeter)
     const GPoint stationPos = station->GetPosition();
-    double rangeToStationPerimiter = m_position.distance(stationPos);
-    rangeToStationPerimiter -= mySE->GetRadius();
-    rangeToStationPerimiter -= station->GetRadius();
+    double rangeToStationPerimeter = m_position.distance(stationPos);
+    rangeToStationPerimeter -= mySE->GetRadius();
+    rangeToStationPerimeter -= station->GetRadius();
 
-    // Verify range to station is within docking perimeter of 2500 meters:
-    _log(DESTINY__TRACE, "Destiny::AttemptDockOperation() rangeToStationPerimiter is %.2fm", rangeToStationPerimiter);
-    if (rangeToStationPerimiter > 2500.0) {
-        AlignTo( station );   // Turn ship and move toward docking point - client will usually call Dock() automatically...sometimes
-        if (mySE->HasPilot() and mySE->GetPilot()->CanThrow())
-            throw UserError ("DockingApproach");
+    _log(DESTINY__TRACE, "Destiny::AttemptDockOperation() station=%u rangeToStationPerimeter=%.2fm",
+         stationID, rangeToStationPerimeter);
+
+    if (rangeToStationPerimeter > 2500.0) {
+        // Out of range: keep intent sticky and align/approach.
+        pClient->SetPendingDock(true);
+
+        _log(DESTINY__TRACE,
+             "Destiny::AttemptDockOperation(): out-of-range, pending dock remains for %s(%u) station=%u dist=%.2f",
+             mySE->GetName(), mySE->GetID(), stationID, rangeToStationPerimeter);
+
+        AlignTo(station);
+
+        // Keep legacy behavior: client expects DockingApproach error when appropriate.
+        if (mySE->HasPilot() && mySE->GetPilot()->CanThrow())
+            throw UserError("DockingApproach");
+
+        return PyStatic.NewNone();
     }
 
-    pClient->SetStateTimer(Player::State::Dock, sConfig.world.StationDockDelay *1000); // default @ 4sec();
+    // In range: arm docking timer flow.
+    pClient->ClearPendingDock();
+
+    _log(DESTINY__TRACE,
+         "Destiny::AttemptDockOperation(): in-range, arming dock timer for %s(%u) station=%u",
+         mySE->GetName(), mySE->GetID(), stationID);
+
+    pClient->SetStateTimer(Player::State::Dock, sConfig.world.StationDockDelay * 1000);
     pClient->SetAutoPilot(false);
 
-    return new PyLong(GetFileTimeNow());
+    return PyStatic.NewNone();
 }
+
+
 
 void DestinyManager::DockingAccepted()
 {

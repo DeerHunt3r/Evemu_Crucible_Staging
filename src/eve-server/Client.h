@@ -226,7 +226,16 @@ public:
     void SetDockStationID(uint32 stationID)             { m_dockStationID = stationID; };
     void SetDockPoint(GPoint &pt)                       { m_dockPoint = pt; }
     uint32 GetDockStationID()                           { return m_dockStationID; };
+    bool IsPendingDock()                                { return m_pendingDock; }
+    void SetPendingDock(bool pending)                   { m_pendingDock = pending; }
+    void ClearPendingDock()                             { m_pendingDock = false; }
+
+    // Docking intent helpers (Crucible: client may not re-issue CmdDock after warp)
+    void RequestDock(uint32 stationID);
+    void CancelDockRequest();
+
     GPoint GetDockPoint()                               { return m_dockPoint; }
+    
     bool InPod()                                        { return (m_ship->groupID() == EVEDB::invGroups::Capsule); }
     bool IsInSpace()                                    { return sDataMgr.IsSolarSystem(m_locationID); }
     bool IsDocked()                                     { return sDataMgr.IsStation(m_locationID); }
@@ -387,6 +396,7 @@ protected:
     uint32 m_locationID;
     uint32 m_moveSystemID;  // holder for jumping to 'systemID'.    timer based.
     uint32 m_dockStationID; // holder for docking to 'stationID'.  timer based.
+    bool m_pendingDock;     // set when CmdDock is received but we are not yet in docking range.
 
     Timer m_stateTimer;      // state timer to consolidate timers
     Timer m_pingTimer;
