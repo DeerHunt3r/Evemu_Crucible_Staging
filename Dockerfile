@@ -31,7 +31,8 @@ COPY /cmake/ /src/cmake
 COPY /dep/ /src/dep
 COPY /src/ /src/src
 COPY /utils/ /src/utils
-# Included for cmake to read git rev-hash
+
+# Included for cmake to read git rev-hash (if present)
 COPY /.git/ /src/.git
 
 # Create necessary directories
@@ -44,9 +45,14 @@ ENV MYSQL_LIBRARIES="/usr/lib/x86_64-linux-gnu/libmariadbclient.so"
 WORKDIR /src/build
 
 # Configure and build the project
-RUN cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Debug .. 
+RUN cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Debug ..
 RUN make -j$(nproc)
 RUN make install
+
+# Bake build fingerprint into the install tree (no need for git inside runtime container)
+RUN mkdir -p /app/etc && \
+    (cd /src && git rev-parse HEAD > /app/etc/build_git_hash.txt 2>/dev/null || echo "nogit" > /app/etc/build_git_hash.txt) && \
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > /app/etc/build_utc.txt
 
 # Final runtime image
 FROM base AS app
@@ -56,6 +62,11 @@ LABEL description="EVEmu Server"
 # Copy built assets
 COPY --from=app-build /src/utils/ /src/utils
 COPY --from=app-build /app/ /app
+
+# ? IMPORTANT: copy source tree into runtime so you can verify the exact files being built/running
+COPY --from=app-build /src/src/ /src/src
+COPY --from=app-build /src/CMakeLists.txt /src/CMakeLists.txt
+COPY --from=app-build /src/config.h.in /src/config.h.in
 
 # Add SQL loading tools
 COPY /sql/ /src/sql

@@ -26,27 +26,47 @@
 #ifndef _INVENTORY_BOUND_H
 #define _INVENTORY_BOUND_H
 
-
 #include "services/BoundService.h"
-#include "Client.h"
+#include "services/Service.h"
+//#include "services/EVEBoundObject.h"
 
-class InventoryBound : public EVEBoundObject <InventoryBound>
+#include "inventory/InventoryItem.h"
+#include "inventory/Inventory.h"
+
+// Forward decls to keep includes light
+class Client;
+class PyRep;
+class PyDict;
+class PyInt;
+class PyBool;
+class PyString;
+class PyTuple;
+class PyList;
+class PyFloat;
+class PyObjectEx;
+
+class InventoryBound : public EVEBoundObject<InventoryBound>
 {
 public:
-    InventoryBound(EVEServiceManager &mgr, BoundServiceParent<InventoryBound>& parent, InventoryItemRef item, EVEItemFlags flag, uint32 ownerID,  bool passive);
+    InventoryBound(EVEServiceManager &mgr,
+                   BoundServiceParent<InventoryBound>& parent,
+                   InventoryItemRef item,
+                   EVEItemFlags flag,
+                   uint32 ownerID,
+                   bool passive);
 
 protected:
     PyResult GetItem(PyCallArgs& call);
     PyResult StripFitting(PyCallArgs& call);
     PyResult DestroyFitting(PyCallArgs& call, PyInt* itemID);
-    PyResult StackAll(PyCallArgs& call, std::optional <PyInt*> flag);
+    PyResult StackAll(PyCallArgs& call, std::optional<PyInt*> flag);
     PyResult ImportExportWithPlanet(PyCallArgs& call, PyInt* spaceportPinID, PyDict* importData, PyDict* exportData, PyFloat* taxRate);
     PyResult RemoveChargeToHangar(PyCallArgs& call, PyTuple* chargeInfo, std::optional<PyRep*> quantity);
     PyResult RemoveChargeToCargo(PyCallArgs& call, PyTuple* chargeInfo, std::optional<PyRep*> quantity);
     PyResult MultiMerge(PyCallArgs& call, PyList* items, std::optional<PyRep*> sourceContainerID);
     PyResult Add(PyCallArgs& call, PyInt* itemID, PyInt* containerID);
     PyResult MultiAdd(PyCallArgs& call, PyList* itemIDs, PyInt* containerID);
-    PyResult List(PyCallArgs& call, std::optional <PyInt*> listFlag);
+    PyResult List(PyCallArgs& call, std::optional<PyInt*> listFlag);
     PyResult CreateBookmarkVouchers(PyCallArgs& call, PyList* bookmarkIDs, PyInt* flag, PyBool* isMove);
     PyResult TakeOutTrash(PyCallArgs& call, PyInt* itemIDs);
     PyResult SetPassword(PyCallArgs& call, PyInt* which, PyString* newPassword, PyString* oldPassword);
@@ -54,19 +74,28 @@ protected:
     PyResult RunRefiningProcess(PyCallArgs& call);
     PyResult Build(PyCallArgs& call);
 
-    bool m_passive;     // still not sure what this is for
+    // Crucible fitting window calls shipInv.FitFitting(...)
+    // Expected signature from logs:
+    // (PyInt*, PyObjectEx*, PyInt*, PyDict*, PyDict*)
+    PyResult FitFitting(PyCallArgs& call,
+                    PyInt* shipID,
+                    PyObjectEx* itemsToFit,
+                    PyInt* locationID,
+                    PyDict* modulesByFlag,
+                    PyDict* dronesByType);
+
+
+    std::vector<int32> CatSortItems(std::vector<InventoryItemRef>& itemVec);
+    PyRep* MoveItems(Client* pClient, std::vector<int32>& items, EVEItemFlags toFlag, int32 quantity, bool manyFlags, float capacity);
+
+    bool m_passive;
     EVEItemFlags m_flag;
 
     uint32 m_itemID;
     uint32 m_ownerID;
 
     Inventory* pInventory;
-
     InventoryItemRef m_self;
-
-    std::vector< int32 > CatSortItems(std::vector< InventoryItemRef >& itemVec);
-
-    PyRep* MoveItems(Client* pClient, std::vector< int32 >& items, EVEItemFlags toFlag, int32 quantity, bool manyFlags, float capacity);
 };
 
-#endif//_INVENTORY_BOUND_H
+#endif // _INVENTORY_BOUND_H

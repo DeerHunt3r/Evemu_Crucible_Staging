@@ -1,45 +1,108 @@
+version: "3.8"
+
 services:
+  db:
+    image: bitnami/mariadb:latest
+    container_name: evemu_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - evemu_mariadb:/bitnami
+    environment:
+      # IMPORTANT:
+      # - Root password is controlled by MARIADB_ROOT_PASSWORD
+      # - The normal app user uses MARIADB_USER / MARIADB_PASSWORD
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD:-evemu_root_pass123}
+      - MARIADB_DATABASE=${MARIADB_DATABASE:-evemu}
+      - MARIADB_USER=${MARIADB_USER:-evemu}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD:-evemu_pass}
+      # Optional (dev only)
+      - MARIADB_CHARACTER_SET=utf8mb4
+      - MARIADB_COLLATE=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # One-shot DB seed/import runner.
+  # Uses your repo's ./sql directory and imports ./sql/base/*.sql.gz into the evemu DB.
+  # Enabled only when you run with: --profile seed
+  seed:
+    image: bitnami/mariadb:latest
+    container_name: evemu_seed
+    profiles: ["seed"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./sql:/seed:ro
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD:-evemu_root_pass123}
+      - MARIADB_DATABASE=${MARIADB_DATABASE:-evemu}
+    entrypoint: ["/bin/sh", "-lc"]
+    command: >
+      set -eux;
+      echo "Seed: waiting for DB...";
+      mariadb-admin ping -h db -uroot -p"$${MARIADB_ROOT_PASSWORD}" --silent;
+
+      echo "Seed: checking if DB has tables...";
+      TABLE_COUNT=$$(mariadb -h db -uroot -p"$${MARIADB_ROOT_PASSWORD}" -N -e
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$${MARIADB_DATABASE}';");
+
+      if [ "$$TABLE_COUNT" -gt 0 ]; then
+        echo "Seed: $$TABLE_COUNT tables already exist in '$${MARIADB_DATABASE}'. Skipping import.";
+        exit 0;
+      fi;
+
+      echo "Seed: DB appears empty, importing /seed/base/*.sql.gz ...";
+      ls -1 /seed/base/*.sql.gz > /tmp/seedlist.txt;
+
+      while read -r f; do
+        echo "Seed: importing $${f}";
+        gunzip -c "$${f}" | mariadb -h db -uroot -p"$${MARIADB_ROOT_PASSWORD}" "$${MARIADB_DATABASE}";
+      done < /tmp/seedlist.txt;
+
+      echo "Seed: import complete.";
+
   server:
-    build: .  # Build image from local source repository
+    build: .
     container_name: evemu_server
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - config:/app/etc
       - server_cache:/app/server_cache
       - /home/rob/EVEImages:/app/image_cache
-      - logs:/app/logs        # optional but very handy
+      - logs:/app/logs
     ports:
       - "26000:26000"
       - "26001:26001"
-    depends_on:
-      - db
     environment:
-      # choose ONE default set; I'm using your "80% / 4 regions" values since those
-      # were last in your current file and therefore what you've actually been running
+      # These are your existing "seed sections" (in-server behavior).
+      # Keep them, but they are NOT a DB bootstrap/import replacement.
       - SEED_MARKET=${SEED_MARKET:-TRUE}
       - SEED_SATURATION=${SEED_SATURATION:-80}
       - SEED_REGIONS=${SEED_REGIONS:-Derelik,The Citadel,The Forge,Essence,Verge Vendor,Everyshore,Tash-Murkon,Sinq Laison}
+
+      # Keep your debug toggle
       - RUN_WITH_GDB=${RUN_GDB:-FALSE}
-    stdin_open: true  # Enables stdin for the container. Attach to it with 'docker attach'
+
+      # If your server binary reads DB creds from env, these are handy to have consistent:
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_NAME=${DB_NAME:-evemu}
+      - DB_USER=${DB_USER:-evemu}
+      - DB_PASS=${DB_PASS:-evemu_pass}
+
+    stdin_open: true
     tty: true
     cap_add:
-      - SYS_PTRACE         # Required for gdb
-
-  db:
-    image: "bitnami/mariadb:latest"
-    container_name: evemu_db
-    volumes:
-      - evemu_mariadb:/bitnami
-    ports:
-      - "3306:3306"
-    environment:
-      - ALLOW_EMPTY_PASSWORD=yes
-      - MARIADB_USER=evemu
-      - MARIADB_PASSWORD=evemu_root_pass123
-      - MARIADB_DATABASE=evemu
+      - SYS_PTRACE
 
 volumes:
   evemu_mariadb:
   config:
   server_cache:
-  image_cache:
   logs:
