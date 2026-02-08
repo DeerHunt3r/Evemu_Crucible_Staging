@@ -65,6 +65,8 @@ InventoryBound::InventoryBound(EVEServiceManager &mgr, BoundServiceParent<Invent
     EVEBoundObject::Add("StackAll", &InventoryBound::StackAll);
     EVEBoundObject::Add("StripFitting", &InventoryBound::StripFitting);
     EVEBoundObject::Add("DestroyFitting", &InventoryBound::DestroyFitting);
+     // Fitting window "Fit" button (shipInv.FitFitting)
+    EVEBoundObject::Add("FitFitting", &InventoryBound::FitFitting);
     EVEBoundObject::Add("ImportExportWithPlanet", &InventoryBound::ImportExportWithPlanet);
     EVEBoundObject::Add("CreateBookmarkVouchers", &InventoryBound::CreateBookmarkVouchers);
     EVEBoundObject::Add("ListDroneBay", &InventoryBound::ListDroneBay);
@@ -84,8 +86,20 @@ PyResult InventoryBound::GetItem(PyCallArgs &call) {
 
 PyResult InventoryBound::StripFitting(PyCallArgs &call)
 {
+    // Client "Strip Fitting" button.
+    // We strip server-side, then return a fresh List() snapshot to force the client to refresh its fitting view
+    // even if it misses some OnItemChange / dogma updates.
+    _log(INV__MESSAGE, "Calling InventoryBound::StripFitting() for %s(%u)", m_self->name(), m_itemID);
+    call.Dump(INV__DUMP);
+
+    if (call.client == nullptr || call.client->GetShip().get() == nullptr) {
+        return PyStatic.NewNone();
+    }
+
     call.client->GetShip()->StripFitting();
-    return nullptr;
+
+    // Force an immediate refresh of the bound inventory contents on the client.
+    return List(call, std::nullopt);
 }
 
 PyResult InventoryBound::DestroyFitting(PyCallArgs &call, PyInt* itemID) {
@@ -304,6 +318,172 @@ PyResult InventoryBound::Add(PyCallArgs &call, PyInt* itemID, PyInt* containerID
 
     return MoveItems(call.client, items, (EVEItemFlags)toFlag, quantity, moveStack, capacity);
 }
+
+
+PyResult InventoryBound::FitFitting(PyCallArgs& call,
+                                   PyInt* shipID,
+                                   PyObjectEx* itemsToFit,
+                                   PyInt* locationID,
+                                   PyDict* modulesByFlag,
+                                   PyDict* dronesByType)
+{
+    PyList* failures = new PyList();
+
+    _log(PLAYER__CALL,
+         "InventoryBound::FitFitting ENTER boundItem=%u shipArg=%u locationArg=%u modulesByFlag=%u dronesByType=%u",
+         m_itemID,
+         (shipID ? shipID->value() : 0),
+         (locationID ? locationID->value() : 0),
+         (modulesByFlag ? modulesByFlag->size() : 0),
+         (dronesByType ? dronesByType->size() : 0));
+
+    call.Dump(PLAYER__CALL_DUMP);
+
+    if (call.client == nullptr || shipID == nullptr || locationID == nullptr || modulesByFlag == nullptr || itemsToFit == nullptr) {
+        _log(PLAYER__CALL, "InventoryBound::FitFitting EXIT early (missing args)");
+        return failures;
+    }
+
+    const uint32 destShipID = shipID->value();
+    if (destShipID != m_itemID) {
+        _log(PLAYER__CALL,
+             "InventoryBound::FitFitting WARN shipArg(%u) != boundItem(%u) (continuing with shipArg)",
+             destShipID, m_itemID);
+    }
+
+    const uint32 stationID = locationID->value();
+    if (stationID == 0 || destShipID == 0) {
+        _log(PLAYER__CALL, "InventoryBound::FitFitting EXIT invalid stationID=%u destShipID=%u", stationID, destShipID);
+        return failures;
+    }
+
+    // itemsToFit is defaultdict(typeID -> set(itemIDs)) encoded as ObjectEx.
+    PyRep* itemsRep = (PyRep*)itemsToFit;
+    if (itemsRep == nullptr || !itemsRep->IsObjectEx()) {
+        _log(PLAYER__CALL, "InventoryBound::FitFitting EXIT itemsToFit not ObjectEx");
+        return failures;
+    }
+
+    PyObjectEx* oex = itemsRep->AsObjectEx();
+    if (oex == nullptr) {
+        _log(PLAYER__CALL, "InventoryBound::FitFitting EXIT itemsToFit AsObjectEx failed");
+        return failures;
+    }
+
+    // In your tree, dict() returns a PyDict& (not a pointer, not a stack-safe value).
+    PyDict* typeToSet = &oex->dict();
+    if (typeToSet == nullptr) {
+        _log(PLAYER__CALL, "InventoryBound::FitFitting EXIT itemsToFit dict() is null");
+        return failures;
+    }
+
+    std::map<uint32, std::vector<uint32>> typeItems;
+
+    for (PyDict::const_iterator it = typeToSet->begin(); it != typeToSet->end(); ++it) {
+        PyInt* typeKey = it->first->AsInt();
+        if (typeKey == nullptr)
+            continue;
+
+        const uint32 typeID = typeKey->value();
+
+        PyRep* valRep = it->second;
+        if (valRep == nullptr || !valRep->IsObjectEx())
+            continue;
+
+        PyObjectEx* setOex = valRep->AsObjectEx();
+        if (setOex == nullptr)
+            continue;
+
+        // set contents are encoded in header tuple:
+        // [0] '__builtin__.set'
+        // [1] tuple( list_of_itemIDs )
+        PyRep* hdrRep = setOex->header();
+        PyTuple* hdr = (hdrRep ? hdrRep->AsTuple() : nullptr);
+        if (hdr == nullptr || hdr->size() < 2)
+            continue;
+
+        PyTuple* inner = hdr->GetItem(1)->AsTuple();
+        if (inner == nullptr || inner->size() < 1)
+            continue;
+
+        PyList* idList = inner->GetItem(0)->AsList();
+        if (idList == nullptr)
+            continue;
+
+        for (uint32 i = 0; i < idList->size(); ++i) {
+            PyInt* iid = idList->GetItem(i)->AsInt();
+            if (iid != nullptr)
+                typeItems[typeID].push_back(iid->value());
+        }
+    }
+
+    _log(PLAYER__CALL, "InventoryBound::FitFitting parsed typeItems=%u", (uint32)typeItems.size());
+
+    // Cache ship/module manager once so we can register modules server-side.
+    auto shipRef = call.client->GetShip();
+    ModuleManager* mm = (shipRef.get() != nullptr ? shipRef->GetModuleManager() : nullptr);
+
+    // Fit by flags: modulesByFlag maps flag -> typeID
+    for (PyDict::const_iterator it = modulesByFlag->begin(); it != modulesByFlag->end(); ++it) {
+        PyInt* flagKey = it->first->AsInt();
+        PyInt* typeVal = it->second->AsInt();
+        if (flagKey == nullptr || typeVal == nullptr)
+            continue;
+
+        const EVEItemFlags fitFlag = (EVEItemFlags)flagKey->value();
+        const uint32 typeID = typeVal->value();
+
+        auto f = typeItems.find(typeID);
+        if (f == typeItems.end() || f->second.empty()) {
+            _log(PLAYER__CALL, "InventoryBound::FitFitting MISSING typeID=%u for flag=%u", typeID, (uint32)fitFlag);
+            failures->AddItem(new_tuple(new PyInt(typeID), new PyInt(1))); // 1 == missing in itemsToFit
+            continue;
+        }
+
+        const uint32 itemID = f->second.back();
+        f->second.pop_back();
+
+        InventoryItemRef itemRef = sItemFactory.GetItemRef(itemID);
+        if (itemRef.get() == nullptr) {
+            _log(PLAYER__CALL, "InventoryBound::FitFitting FAIL itemID=%u not found in factory", itemID);
+            failures->AddItem(new_tuple(new PyInt(itemID), new PyInt(2))); // 2 == item not found
+            continue;
+        }
+
+        _log(PLAYER__CALL,
+             "InventoryBound::FitFitting moving itemID=%u typeID=%u -> shipID=%u flag=%u",
+             itemID, typeID, destShipID, (uint32)fitFlag);
+
+        // 1) Move it into the ship slot (client sees it immediately)
+        itemRef->Move(destShipID, fitFlag, true);
+
+        // 2) Register it with ModuleManager (server can actually use/strip it)
+        if (mm != nullptr) {
+            ModuleItemRef modRef = sItemFactory.GetModuleRef(itemID);
+            if (modRef.get() != nullptr) {
+                if (!mm->AddModule(modRef, fitFlag)) {
+                    _log(PLAYER__CALL, "InventoryBound::FitFitting WARN AddModule failed itemID=%u flag=%u", itemID, (uint32)fitFlag);
+                    failures->AddItem(new_tuple(new PyInt(itemID), new PyInt(3))); // 3 == AddModule failed
+                }
+            } else {
+                _log(PLAYER__CALL, "InventoryBound::FitFitting WARN GetModuleRef failed itemID=%u", itemID);
+                failures->AddItem(new_tuple(new PyInt(itemID), new PyInt(4))); // 4 == GetModuleRef failed
+            }
+        } else {
+            _log(PLAYER__CALL, "InventoryBound::FitFitting WARN ship/mm missing; module itemID=%u not registered", itemID);
+            failures->AddItem(new_tuple(new PyInt(itemID), new PyInt(5))); // 5 == ship/mm missing
+        }
+    }
+
+    // Final refresh so the ship/module state is consistent after bulk fitting
+    if (shipRef.get() != nullptr) {
+        shipRef->UpdateModules();
+    }
+
+    _log(PLAYER__CALL, "InventoryBound::FitFitting EXIT failures=%u", failures->size());
+    return failures;
+}
+
 
 // this call is for moving items to *THIS* inventory
 PyResult InventoryBound::MultiAdd(PyCallArgs &call, PyList* itemIDs, PyInt* containerID) {
