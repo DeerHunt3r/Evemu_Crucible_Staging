@@ -127,6 +127,7 @@ public:
 
     /* Global Actions */
     void Stop();
+    void Stop(bool userCmd);
     void Halt();     // puts entity at 0 velocity
     void Eject();   // avoid numerous other redirect calls
     void SetCloak(bool set=false)                       { m_cloaked = set; }
@@ -372,7 +373,12 @@ private:
         accel(accel_),
         cruise(cruise_),
         decel(decel_),
-        warp_vector(warp_vector_)
+        warp_vector(warp_vector_),
+        lastPosSyncStamp(0),
+        lastBubbleID(0),
+        enteredTargetBubble(false),
+        leftOriginBubble(false),
+        sentWarpStartSync(false)
         {}
         uint32 start_time;          //from sEntityList::GetStamp()
         double total_distance;      //in m
@@ -384,6 +390,14 @@ private:
         bool accel;
         bool cruise;
         bool decel;
+
+        // Warp sync helpers (server-side, low-noise)
+        uint32 lastPosSyncStamp;     // stamp of last server position sync during warp
+        uint32 lastBubbleID;         // last bubble id we added during warp (0 means none)
+        bool enteredTargetBubble;    // set once when we first enter the destination bubble
+        bool leftOriginBubble;       // set once after we leave the origin bubble (then we are "mid-warp")
+
+        bool sentWarpStartSync;    // set once when we first enter cruise and send a single authoritative position sync
         GVector warp_vector;        //target direction based on ship's initial position
     };
     WarpState* m_warpState;		    //we own this.

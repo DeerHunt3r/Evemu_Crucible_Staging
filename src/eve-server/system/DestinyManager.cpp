@@ -1,3 +1,4 @@
+// APFIX_MARKER_DESTINYMANAGER_WARPTOLANDMINE_REMOVED_v19
 /*
     ------------------------------------------------------------------------------------
     LICENSE:
@@ -48,6 +49,8 @@
 #include "system/SystemBubble.h"
 #include "system/SystemManager.h"
 #include <cstdlib>
+#include <unordered_map>
+#include <unordered_set>
 
 
 DestinyManager::DestinyManager(SystemEntity *self)
@@ -566,29 +569,28 @@ bool DestinyManager::AbortIfLoginWarping(bool showMsg) {
     return false;
 }
 
-void DestinyManager::Stop() {
-    // Usually there's no need to show a message for this because it gets
-    // triggered unnecessarily a few times upon login. Commands that should
-    // show a notification are handled in BeyonceService.
-    if (AbortIfLoginWarping(false)) {
+void DestinyManager::Stop()
+{
+    // Default Stop() is used by the movement state machine; treat it as a non-user stop.
+    Stop(false);
+}
+
+void DestinyManager::Stop(bool userCmd)
+{
+    if (mySE == nullptr)
         return;
-    }
 
-    // AP not implemented yet in this version  -allan 4Mar15
-    // Clear autopilot
-    if (mySE->HasPilot()) {
-        mySE->GetPilot()->SetAutoPilot(false);
-    }
+    Client* pClient = mySE->GetPilot();
 
-    if (m_userSpeedFraction == 0.0f) {
-        m_stop = true;
-    } else if  ((m_ballMode == Destiny::Ball::Mode::WARP) and (!IsWarping()))  {
-        //warp aborted before initialized.  standard Stop() applies.
-        m_ballMode = Destiny::Ball::Mode::STOP;
-    } else if (IsMoving()) {
-        //stop called while moving
-        m_ballMode = Destiny::Ball::Mode::STOP;
-    }
+    // Crucible-like: only a player-initiated STOP cancels autopilot.
+    // (We call Stop(false) from server-driven settle windows, warp-too-close fallbacks, etc.)
+    if (userCmd && pClient != nullptr && pClient->IsAutoPilot())
+        pClient->SetAutoPilot(false);
+
+    if (m_ballMode == Destiny::Ball::Mode::STOP)
+        return;
+
+    m_ballMode = Destiny::Ball::Mode::STOP;
 
     m_accel = false;
     m_decel = false;
@@ -604,12 +606,13 @@ void DestinyManager::Stop() {
     m_stop = true;
 
     CmdStop du;
-        du.entityID = mySE->GetID();
-    PyTuple *up = du.Encode();
+    du.entityID = mySE->GetID();
+    PyTuple* up = du.Encode();
     SendSingleDestinyUpdate(&up);
     // consumed
     up = nullptr;
 }
+
 
 void DestinyManager::Halt() {
     SafeDelete(m_warpState);
@@ -1824,6 +1827,19 @@ void DestinyManager::WarpDecel(uint16 sec_into_warp) {
 }
 
 void DestinyManager::WarpUpdate(double currentShipSpeed) {
+    // One-time warp-exit sync gating:
+    // The client smooths between destiny updates. If we hard-snap position every tick near
+    // warp exit, observers can diverge (stutter/popping). We only do ONE authoritative
+    // SetPosition(..., true) when the ship first enters the destination bubble.
+    static std::unordered_map<uint32, const void*> s_lastWarpStatePtr;
+    static std::unordered_set<uint32> s_exitSyncDone;
+
+    const void* wsPtr = static_cast<const void*>(m_warpState);
+    auto itWS = s_lastWarpStatePtr.find(mySE->GetID());
+    if (itWS == s_lastWarpStatePtr.end() || itWS->second != wsPtr) {
+        s_lastWarpStatePtr[mySE->GetID()] = wsPtr;
+        s_exitSyncDone.erase(mySE->GetID());
+    }
     //  update position and velocity for all stages.
     //  this method is ~1000m off actual.  could be due to rounding.   -allan 9Jan15
     m_velocity = (m_warpState->warp_vector * currentShipSpeed);
@@ -1856,18 +1872,47 @@ void DestinyManager::WarpUpdate(double currentShipSpeed) {
 
         m_targBubble->Add(mySE);
 
-        SetPosition(m_position, true);
+        // One-time authoritative settle broadcast on first entry into destination bubble.
+        if (s_exitSyncDone.find(mySE->GetID()) == s_exitSyncDone.end()) {
+            SetPosition(m_position, true);
+            s_exitSyncDone.insert(mySE->GetID());
+        }
     } else {
+    // Not yet in target bubble.  Stay in the current/origin bubble until we actually leave it.
+    // This prevents the asteroid field (and other nearby objects) from disappearing immediately
+    // when the player initiates warp but is still on-grid / still accelerating.
+    SystemBubble* curBubble = mySE->SysBubble();
+    if (curBubble != nullptr && curBubble->InBubble(m_position, false)) {
+        if (is_log_enabled(DESTINY__WARP_TRACE)) {
+            _log(
+                DESTINY__WARP_TRACE,
+                "Destiny::WarpUpdate()  %s(%u): still inside current bubble %u, not switching to mid-warp bubble yet.",
+                mySE->GetName(),
+                mySE->GetID(),
+                curBubble->GetID()
+            );
+        }
+
+        // Ensure we're still associated with the current bubble and keep the client position updated.
+        curBubble->Add(mySE);
+        SetPosition(m_position, true);
+        return;
+    }
+
+    if (is_log_enabled(DESTINY__WARP_TRACE)) {
         _log(
             DESTINY__WARP_TRACE,
             "Destiny::WarpUpdate()  %s(%u): adding to midWarpSystemBubble.",
             mySE->GetName(),
             mySE->GetID()
         );
-        SystemBubble* midWarpSystemBubble(sBubbleMgr.GetBubble(mySE->SystemMgr(), m_position));
-        midWarpSystemBubble->Add(mySE);
     }
+
+    SystemBubble* midWarpSystemBubble(sBubbleMgr.GetBubble(mySE->SystemMgr(), m_position, true));
+    midWarpSystemBubble->Add(mySE);
 }
+    }
+
 
 void DestinyManager::WarpStop(double currentShipSpeed) {
        
@@ -2140,7 +2185,13 @@ void DestinyManager::WarpTo(const GPoint& where, int32 distance/*0*/, bool autoP
     // adjust target point by calculated stopping point
     m_targetPoint -= warp_distance;
 
-    m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), m_targetPoint);
+        // Choose destination bubble in a Crucible-like way:
+    // - If warping to a specific entity (station/belt/etc), use that entity's current bubble so everyone converges.
+    // - Otherwise use warp-aware bubble lookup on the destination point.
+    if (pSE != nullptr && pSE->SysBubble() != nullptr)
+        m_targBubble = pSE->SysBubble();
+    else
+        m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), m_targetPoint, true);
     if (is_log_enabled(DESTINY__WARP_TRACE))
         _log(DESTINY__TRACE, "Destiny::WarpTo() - %s(%u) target bubble: %u  m_stopDistance: %i  m_targetDistance: %.2f",
             mySE->GetName(), mySE->GetID(), m_targBubble->GetID(), m_stopDistance, m_targetDistance);
@@ -2186,18 +2237,25 @@ void DestinyManager::WarpTo(const GPoint& where, int32 distance/*0*/, bool autoP
      */
 
     if (mySE->HasPilot()) {
+        Client *pClient = mySE->GetPilot();
+
+        // If we are too close to enter warp, Crucible does NOT spam an error for autopilot.
+        // Autopilot slowboats/approaches to the target instead.
         if (m_targetDistance < static_cast<double>(minWarpDistance)) {
-            mySE->GetPilot()->SendErrorMsg("That is too close for your Warp Drive.");
-            // warp distance too close.  cancel warp and return
-            // we may need to send pos update
-            if (sConfig.debug.PositionHack)
-                SetPosition(mySE->GetPosition(), true);
-            m_ballMode = Destiny::Ball::Mode::STOP;
-            SafeDelete(m_warpState);
+            if (autoPilot) {
+                if (pSE != nullptr) {
+                    // Move into jump/interaction range rather than failing the route.
+                    Follow(pSE, 2500);
+                } else {
+                    // Fallback: move toward the point.
+                    GotoPoint(where);
+                }
+                return;
+            }
+
+            Stop(true);   // user-initiated / manual warp command
             return;
         }
-
-        Client *pClient = mySE->GetPilot();
 
         /*  capacitor for warp formulas from https://oldforums.eveonline.com/?a=topic&threadID=332116
          *  Energy to warp = warpCapacitorNeed * mass * au * (1 - warp_drive_operation_skill_level * 0.10)
@@ -2217,7 +2275,11 @@ void DestinyManager::WarpTo(const GPoint& where, int32 distance/*0*/, bool autoP
                 GVector warp_direction(m_position, where);
                 GPoint newTarget(m_position + (warp_direction * m_targetDistance));
 
-                m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), newTarget);
+                                // Keep destination bubble consistent even in cap-limited updates.
+                if (pSE != nullptr && pSE->SysBubble() != nullptr)
+                    m_targBubble = pSE->SysBubble();
+                else
+                    m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), newTarget, true);
                 if (is_log_enabled(DESTINY__WARP_TRACE))
                     _log(DESTINY__TRACE, "Destiny::WarpTo():Update - %s(%u) target bubble: %u  m_stopDistance: %i  m_targetDistance: %.2f",
                         mySE->GetName(), mySE->GetID(), m_targBubble->GetID(), m_stopDistance, m_targetDistance);
@@ -2527,7 +2589,7 @@ PyResult DestinyManager::AttemptDockOperation()
          mySE->GetName(), mySE->GetID(), stationID);
 
     pClient->SetStateTimer(Player::State::Dock, sConfig.world.StationDockDelay * 1000);
-    pClient->SetAutoPilot(false);
+    // Do not cancel autopilot when merely arming docking; docking completion will clear it.
 
     return PyStatic.NewNone();
 }
@@ -2573,6 +2635,16 @@ void DestinyManager::SetPosition(const GPoint &pt, bool update /*false*/) {
 
     // this sets InventoryItemRef.m_position correctly, which is used for all position references
     mySE->SetPosition(m_position);
+
+    // Player-driven movement should expand the current bubble/grid to prevent
+    // premature bubble migration (which makes on-grid objects "disappear") during orbit/slowboat/combat.
+    // Do NOT expand during warp.
+    if (mySE->HasPilot() && !IsWarping()) {
+        SystemBubble* curBubble = mySE->SysBubble();
+        if (curBubble != nullptr) {
+            curBubble->IncludePoint(m_position);
+        }
+    }
 
     //according to packet sniffs, this is only used for 'Structure' and 'Probe" items.  'update' is for syncing client position data with ours
     if (mySE->IsPOSSE() or mySE->IsProbeSE() or update) {

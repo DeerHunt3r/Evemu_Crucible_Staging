@@ -63,16 +63,19 @@ public:
     SystemBubble* FindBubble(SystemEntity *ent) const;
     //call to find the bubble containing the GPoint specified, if no bubble does, return NULL
     SystemBubble* FindBubble(uint32 systemID, const GPoint &pos) const;
+    SystemBubble* FindBubble(uint32 systemID, const GPoint &pos, bool inWarp) const;
     SystemBubble* FindBubbleByID(uint16 bubbleID);
     //find the bubble containing the GPoint specified.  will call create to make new bubble if none found.
     //  this is preferred method to create new bubble.
     SystemBubble* GetBubble(SystemManager* sysMgr, const GPoint &pos);
+    SystemBubble* GetBubble(SystemManager* sysMgr, const GPoint& pos, bool inWarp);
     //call to calculate new bubble's center from entity's velocity:
     void NewBubbleCenter(GVector shipVelocity, GPoint& newBubbleCenter);
     //call when an entity is removed from the system.
     void Remove(SystemEntity* ent);
     void clear();
     void ClearSystemBubbles(uint32 systemID);
+    void AddBubble(uint32 systemID, SystemBubble* pBubble);
     void RemoveBubble(uint32 systemID, SystemBubble* pSB);
 
     uint32 Count()                                      { return m_bubbles.size(); }
@@ -98,6 +101,7 @@ public:
 
 protected:
     SystemBubble* MakeBubble(SystemManager* sysMgr, GPoint pos);
+    SystemBubble* MakeBubble(SystemManager* sysMgr, GPoint pos, bool inWarp);
 
 private:
     Timer m_emptyTimer;

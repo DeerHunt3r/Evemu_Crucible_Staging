@@ -1,0 +1,697 @@
+diff --git a/Dockerfile b/Dockerfile
+index cd2cd7ec..7b86963d 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,7 +1,9 @@
+-# Base image for building EVEmu using Debian 12
+-FROM debian:12 AS base
++# EVEmu Crucible - Dev Runtime (single-container workflow)
++# Goal: edit source on host, compile + run in the same container without image rebuilds.
+ 
+-# Install build dependencies
++FROM debian:12
++
++# Build + runtime deps
+ RUN apt-get update && \
+     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+     build-essential \
+@@ -18,65 +20,78 @@ RUN apt-get update && \
+     gdb \
+     libutfcpp-dev \
+     mariadb-client \
+-    passwd \
++    pkg-config \
+     && apt-get clean && rm -rf /var/lib/apt/lists/*
+ 
+-# Build stage
+-FROM base AS app-build
++# Keep legacy expectations (your compose mounts these)
++RUN mkdir -p /app/etc /app/logs /app/server_cache /app/image_cache
+ 
+-# Add project files
+-COPY CMakeLists.txt /src/
+-COPY config.h.in /src/
+-COPY /cmake/ /src/cmake
+-COPY /dep/ /src/dep
+-COPY /src/ /src/src
+-COPY /utils/ /src/utils
++# Create a persistent source+build workspace
++RUN mkdir -p /src /src/build
+ 
+-# Included for cmake to read git rev-hash (if present)
+-COPY /.git/ /src/.git
++# Dev start script:
++# - configures cmake once (or when cache is missing)
++# - builds every start (so edits are always compiled)
++# - runs the freshly built binary
++RUN cat > /usr/local/bin/evemu-dev-start.sh << 'EOF' && chmod +x /usr/local/bin/evemu-dev-start.sh
++#!/bin/sh
++set -eu
+ 
+-# Create necessary directories
+-RUN mkdir -p /src/build /app /app/logs /app/server_cache /app/image_cache
++SRC="/src"
++BUILD="/src/build"
+ 
+-ENV MYSQL_INCLUDE_DIR="/usr/include/mariadb"
+-ENV MYSQL_LIBRARIES="/usr/lib/x86_64-linux-gnu/libmariadbclient.so"
++echo "=================================================================="
++echo "EVEmu dev start"
++echo "  SRC  : ${SRC}"
++echo "  BUILD: ${BUILD}"
++echo "=================================================================="
+ 
+-# Set working directory
+-WORKDIR /src/build
++if [ ! -f "${SRC}/CMakeLists.txt" ]; then
++  echo "ERROR: ${SRC}/CMakeLists.txt not found."
++  echo "This container expects your repo bind-mounted to /src."
++  exit 1
++fi
+ 
+-# Configure and build the project
+-RUN cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Debug ..
+-RUN make -j$(nproc)
+-RUN make install
++mkdir -p "${BUILD}"
+ 
+-# Bake build fingerprint into the install tree (no need for git inside runtime container)
+-RUN mkdir -p /app/etc && \
+-    (cd /src && git rev-parse HEAD > /app/etc/build_git_hash.txt 2>/dev/null || echo "nogit" > /app/etc/build_git_hash.txt) && \
+-    date -u +"%Y-%m-%dT%H:%M:%SZ" > /app/etc/build_utc.txt
++# Show exactly what source revision we are compiling (if .git is present)
++if [ -d "${SRC}/.git" ]; then
++  echo "Git hash (host repo, inside container): $(cd "${SRC}" && git rev-parse HEAD)"
++else
++  echo "Git hash: (no .git present inside /src)"
++fi
+ 
+-# Final runtime image
+-FROM base AS app
++cd "${BUILD}"
+ 
+-LABEL description="EVEmu Server"
++# Configure once (or if build dir was wiped)
++if [ ! -f "CMakeCache.txt" ]; then
++  echo "[cmake] configuring..."
++  cmake -DCMAKE_BUILD_TYPE=Debug ..
++fi
+ 
+-# Copy built assets
+-COPY --from=app-build /src/utils/ /src/utils
+-COPY --from=app-build /app/ /app
++echo "[make] building..."
++make -j"$(nproc)"
+ 
+-# ? IMPORTANT: copy source tree into runtime so you can verify the exact files being built/running
+-COPY --from=app-build /src/src/ /src/src
+-COPY --from=app-build /src/CMakeLists.txt /src/CMakeLists.txt
+-COPY --from=app-build /src/config.h.in /src/config.h.in
++BIN="${BUILD}/src/eve-server/eve-server"
++if [ ! -x "${BIN}" ]; then
++  echo "ERROR: server binary not found at ${BIN}"
++  echo "If your build outputs elsewhere, we can adjust this path."
++  exit 1
++fi
+ 
+-# Add SQL loading tools
+-COPY /sql/ /src/sql
++echo "Built binary: ${BIN}"
++echo "Binary timestamp: $(ls -l "${BIN}")"
++echo "=================================================================="
+ 
+-# Run SQL tool script
+-RUN cd /src/sql && ./get_evedbtool.sh
++# Optional: run under gdb if enabled
++if [ "${RUN_WITH_GDB:-FALSE}" = "TRUE" ] || [ "${RUN_WITH_GDB:-FALSE}" = "true" ]; then
++  exec gdb --args "${BIN}"
++fi
+ 
+-# Expose server ports
+-EXPOSE 26000
+-EXPOSE 26001
++exec "${BIN}"
++EOF
+ 
+-# Default command
+-CMD ["/src/utils/container-scripts/start.sh"]
++EXPOSE 26000 26001
++
++WORKDIR /src/build
++CMD ["/usr/local/bin/evemu-dev-start.sh"]
+diff --git a/docker-compose.yml b/docker-compose.yml
+index de6ecd30..74fc7394 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -9,14 +9,10 @@ services:
+     volumes:
+       - evemu_mariadb:/bitnami
+     environment:
+-      # IMPORTANT:
+-      # - Root password is controlled by MARIADB_ROOT_PASSWORD
+-      # - The normal app user uses MARIADB_USER / MARIADB_PASSWORD
+       - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD:-evemu_root_pass123}
+       - MARIADB_DATABASE=${MARIADB_DATABASE:-evemu}
+       - MARIADB_USER=${MARIADB_USER:-evemu}
+       - MARIADB_PASSWORD=${MARIADB_PASSWORD:-evemu_pass}
+-      # Optional (dev only)
+       - MARIADB_CHARACTER_SET=utf8mb4
+       - MARIADB_COLLATE=utf8mb4_unicode_ci
+     healthcheck:
+@@ -25,9 +21,7 @@ services:
+       timeout: 5s
+       retries: 30
+ 
+-  # One-shot DB seed/import runner.
+-  # Uses your repo's ./sql directory and imports ./sql/base/*.sql.gz into the evemu DB.
+-  # Enabled only when you run with: --profile seed
++  # One-shot DB seed/import runner (unchanged behavior)
+   seed:
+     image: bitnami/mariadb:latest
+     container_name: evemu_seed
+@@ -71,25 +65,33 @@ services:
+     depends_on:
+       db:
+         condition: service_healthy
++
++    # THIS is the key to "one container, edits reflected":
++    # mount your working tree into /src, and keep build output in a named volume.
+     volumes:
+-      - config:/app/etc
++      - ./:/src
++      - build_cache:/src/build
++
++      # keep your existing runtime mounts
++      - ./etc:/src/etc
+       - server_cache:/app/server_cache
+       - /home/rob/EVEImages:/app/image_cache
+-      - logs:/app/logs
++      - ./logs:/src/logs
++
+     ports:
+       - "26000:26000"
+       - "26001:26001"
++
+     environment:
+-      # These are your existing "seed sections" (in-server behavior).
+-      # Keep them, but they are NOT a DB bootstrap/import replacement.
++      # keep your seed sections (server behavior)
+       - SEED_MARKET=${SEED_MARKET:-TRUE}
+       - SEED_SATURATION=${SEED_SATURATION:-80}
+       - SEED_REGIONS=${SEED_REGIONS:-Derelik,The Citadel,The Forge,Essence,Verge Vendor,Everyshore,Tash-Murkon,Sinq Laison}
+ 
+-      # Keep your debug toggle
++      # keep your debug toggle
+       - RUN_WITH_GDB=${RUN_GDB:-FALSE}
+ 
+-      # If your server binary reads DB creds from env, these are handy to have consistent:
++      # keep DB env consistency
+       - DB_HOST=${DB_HOST:-db}
+       - DB_PORT=${DB_PORT:-3306}
+       - DB_NAME=${DB_NAME:-evemu}
+@@ -103,6 +105,5 @@ services:
+ 
+ volumes:
+   evemu_mariadb:
+-  config:
+   server_cache:
+-  logs:
++  build_cache:
+diff --git a/src/eve-server/system/DestinyManager.cpp b/src/eve-server/system/DestinyManager.cpp
+index 16a0c396..fc4424c2 100644
+--- a/src/eve-server/system/DestinyManager.cpp
++++ b/src/eve-server/system/DestinyManager.cpp
+@@ -90,7 +90,12 @@ mvPacket(nullptr)
+     m_changeDelay = false;
+     m_tractorPause = false;
+     m_hasSentShipUpdates = false;
++    m_lastWarpStopMS = 0;
++    m_lastJumpMS = 0;
+ 
++    m_postJumpResetPending = false;
++    m_hasSetStateSpeedFractionOverride = false;
++    m_setStateSpeedFractionOverride = 0.0f;
+     m_capNeeded = 0.0;
+     m_prevSpeed = 0.0f;
+     m_degPerTic = 0.0f;
+@@ -452,6 +457,19 @@ void DestinyManager::SetSpeedFraction(float fraction/*1.0*/, bool startMovement/
+         SendDestinyUpdate(updates);
+ }
+ 
++void DestinyManager::PrimeUserSpeedFractionForSetState(float fraction) {
++    // Do NOT call SetSpeedFraction() here.
++    // This helper must not emit destiny updates; it only primes internal fields
++    // used by EncodeDestiny() for the ego ship inside the SetState bundle.
++    if (fraction < 0.0f) {
++        fraction = 0.0f;
++    } else if (fraction > 1.0f) {
++        fraction = 1.0f;
++    }
++
++    m_userSpeedFraction = fraction;
++}
++
+ void DestinyManager::UpdateVelocity(bool isMoving) {
+     uint8 logType(0);
+     if ((m_ballMode == Destiny::Ball::Mode::WARP) and (m_warpState != nullptr)) {
+@@ -566,7 +584,19 @@ bool DestinyManager::AbortIfLoginWarping(bool showMsg) {
+     return false;
+ }
+ 
+-void DestinyManager::Stop() {
++void DestinyManager::Stop(bool userCmd) {
++    if (mySE != nullptr && mySE->HasPilot()) {
++        Client* pClient = mySE->GetPilot();
++        if (pClient != nullptr && pClient->IsAutoPilot() && is_log_enabled(AUTOPILOT__TRACE)) {
++            _log(AUTOPILOT__TRACE,
++                 "Destiny::Stop(userCmd=%s) while AP=true ship=%s(%u) mode=%u warping=%s moving=%s",
++                 (userCmd ? "true" : "false"),
++                 mySE->GetName(), mySE->GetID(),
++                 static_cast<uint32>(m_ballMode),
++                 (IsWarping() ? "true" : "false"),
++                 (IsMoving() ? "true" : "false"));
++        }
++    }
+     // Usually there's no need to show a message for this because it gets
+     // triggered unnecessarily a few times upon login. Commands that should
+     // show a notification are handled in BeyonceService.
+@@ -574,19 +604,26 @@ void DestinyManager::Stop() {
+         return;
+     }
+ 
+-    // AP not implemented yet in this version  -allan 4Mar15
+-    // Clear autopilot
+-    if (mySE->HasPilot()) {
+-        mySE->GetPilot()->SetAutoPilot(false);
+-    }
++    /*
++     * IMPORTANT (Crucible behavior):
++     * Do NOT clear autopilot here.
++     *
++     * This Stop() is invoked by internal destiny state transitions (warp settle,
++     * post-jump settle, etc.). Clearing autopilot here causes autopilot to shut
++     * off after the first hop because the ship naturally enters STOP during
++     * navigation.
++     *
++     * Autopilot should only be cleared by explicit player action (CmdStop / toggle),
++     * docking completion, or arrival/route completion logic.
++     */
+ 
+     if (m_userSpeedFraction == 0.0f) {
+         m_stop = true;
+     } else if  ((m_ballMode == Destiny::Ball::Mode::WARP) and (!IsWarping()))  {
+-        //warp aborted before initialized.  standard Stop() applies.
++        // warp aborted before initialized. standard Stop() applies.
+         m_ballMode = Destiny::Ball::Mode::STOP;
+     } else if (IsMoving()) {
+-        //stop called while moving
++        // stop called while moving
+         m_ballMode = Destiny::Ball::Mode::STOP;
+     }
+ 
+@@ -603,6 +640,44 @@ void DestinyManager::Stop() {
+     SetSpeedFraction(0.0f);
+     m_stop = true;
+ 
++    // Autopilot settle window: suppress CmdStop destiny update to avoid client-side AP disable
++    Client* pClient = mySE->GetPilot();
++    const bool preserveAutoPilot = (pClient != nullptr) && pClient->IsAutoPilot() && (
++        pClient->IsInvul() ||
++        pClient->IsJump() ||
++        RecentlyJumped() ||
++        RecentlyWarpStopped() ||
++        IsCloaked()
++    );
++
++    // Crucible behavior: internal Stop() transitions during jump/warp settle must NOT emit CmdStop while autopilot is enabled.
++    // The client treats a CmdStop during those settle windows as deliberate pilot input and may toggle autopilot off client-side.
++    // Outside of settle windows, we still send CmdStop (it is required for proper nav/warp completion), but we never clear autopilot here.
++    if (!userCmd && preserveAutoPilot) {
++        if (is_log_enabled(AUTOPILOT__TRACE)) {
++            _log(AUTOPILOT__TRACE,
++                 "Destiny::Stop() - suppressing CmdStop update to preserve autopilot (Invul=%s Jump=%s RecentJump=%s RecentWarpStop=%s Cloaked=%s).",
++                 (pClient != nullptr && pClient->IsInvul()) ? "true" : "false",
++                 (pClient != nullptr && pClient->IsJump()) ? "true" : "false",
++                 RecentlyJumped() ? "true" : "false",
++                 RecentlyWarpStopped() ? "true" : "false",
++                 IsCloaked() ? "true" : "false");
++        }
++        return;
++    }
++
++    if (pClient != nullptr && pClient->IsAutoPilot() && is_log_enabled(AUTOPILOT__TRACE)) {
++        _log(AUTOPILOT__TRACE,
++             "Destiny::Stop() - sending CmdStop (userCmd=%s preserve=%s) while autopilot is ON (Invul=%s Jump=%s RecentJump=%s RecentWarpStop=%s Cloaked=%s).",
++             userCmd ? "true" : "false",
++             preserveAutoPilot ? "true" : "false",
++             pClient->IsInvul() ? "true" : "false",
++             pClient->IsJump() ? "true" : "false",
++             RecentlyJumped() ? "true" : "false",
++             RecentlyWarpStopped() ? "true" : "false",
++             IsCloaked() ? "true" : "false");
++    }
++
+     CmdStop du;
+         du.entityID = mySE->GetID();
+     PyTuple *up = du.Encode();
+@@ -611,6 +686,7 @@ void DestinyManager::Stop() {
+     up = nullptr;
+ }
+ 
++
+ void DestinyManager::Halt() {
+     SafeDelete(m_warpState);
+ 
+@@ -1893,8 +1969,18 @@ void DestinyManager::WarpStop(double currentShipSpeed) {
+     
+     if (mySE->IsShipSE()) {
+         _log(AUTOPILOT__MESSAGE, "Destiny::WarpStop(): %s(%u) - Warp complete.", mySE->GetName(), mySE->GetID());
+-        mySE->GetPilot()->SetLoginWarpComplete();
++
++        Client* pClient = mySE->GetPilot();
++        if (pClient != nullptr) {
++            pClient->SetLoginWarpComplete();
++            // Feed the autopilot settle window logic on Client as well.
++            // (removed) MarkWarpStopNow was an experimental hook; not present in Crucible baseline.
++
++        }
+     }
++
++    m_lastWarpStopMS = GetTimeMSeconds();
++
+     m_targetPoint += (m_warpState->warp_vector *10000);
+     // SetSpeedFraction() checks for m_state = Warp and warpstate != null to set decel variables correctly with warp decel.
+     //   have to call this BEFORE deleting or reseting m_state or WarpState.
+@@ -1915,6 +2001,21 @@ void DestinyManager::WarpStop(double currentShipSpeed) {
+     Halt();
+ }
+ 
++bool DestinyManager::RecentlyWarpStopped(uint32 withinMs) const
++{
++    if (m_lastWarpStopMS == 0)
++        return false;
++    return ((GetTimeMSeconds() - m_lastWarpStopMS) < withinMs);
++}
++
++bool DestinyManager::RecentlyJumped(uint32 withinMs) const
++{
++    if (m_lastJumpMS == 0)
++        return false;
++    return ((GetTimeMSeconds() - m_lastJumpMS) < withinMs);
++}
++
++
+ //called whenever an entity is going away and can no longer be used as a target
+ void DestinyManager::EntityRemoved(SystemEntity *pSE) {
+     if (m_targetEntity.second == pSE) {
+@@ -2118,29 +2219,34 @@ void DestinyManager::WarpTo(const GPoint& where, int32 distance/*0*/, bool autoP
+      */
+     SafeDelete(m_warpState);
+ 
+-    // check for autopilot.  it has 'special' checks in client for auto-disable by destiny update
+-    if (autoPilot) {
+-        Follow(pSE, distance);
+-    } else {
+-        GotoPoint(where);
+-    }
++    // NOTE: Do not call GotoPoint() here.
++    // WarpTo must perform a normal align/enter-warp sequence, driven by ProcessState() in WARP mode.
++    // Calling GotoPoint() emits CmdGotoPoint and switches ball mode to GOTO, which can confuse the client
++    // and can suppress proper warp state transitions (especially post-jump).
++    // We compute m_targetPoint below, then BeginMovement() to seed heading for alignment.
+ 
+     m_targetEntity.first = 0;
+     m_targetEntity.second = nullptr;
+ 
+     m_stopDistance = distance;
+     // get warp target point
+-    GVector warp_distance(m_position, where);
+-    m_targetDistance = warp_distance.length();
+-    m_targetDistance -= static_cast<double>(m_stopDistance);
+-    // change to heading
+-    warp_distance.normalize();
+-    // adjust for stop distance from our travel direction
+-    warp_distance *= m_stopDistance;
+-    // adjust target point by calculated stopping point
+-    m_targetPoint -= warp_distance;
+-
+-    m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), m_targetPoint);
++    GVector warp_direction(m_position, where);
++    const double rawDistance = warp_direction.length();
++    m_targetDistance = rawDistance - static_cast<double>(m_stopDistance);
++    if (m_targetDistance < 0.0)
++        m_targetDistance = 0.0;
++
++    // set the intended warp exit point (target minus stopping offset along travel direction)
++    m_targetPoint = where;
++    if (rawDistance > 0.0 && m_stopDistance > 0) {
++        warp_direction.normalize();
++        warp_direction *= m_stopDistance;
++        m_targetPoint -= warp_direction;
++    }
++
++    // Seed movement vectors for warp alignment (requires m_targetPoint to be set)
++    BeginMovement();
++m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), m_targetPoint);
+     if (is_log_enabled(DESTINY__WARP_TRACE))
+         _log(DESTINY__TRACE, "Destiny::WarpTo() - %s(%u) target bubble: %u  m_stopDistance: %i  m_targetDistance: %.2f",
+             mySE->GetName(), mySE->GetID(), m_targBubble->GetID(), m_stopDistance, m_targetDistance);
+@@ -2215,10 +2321,13 @@ void DestinyManager::WarpTo(const GPoint& where, int32 distance/*0*/, bool autoP
+             if (capNeeded > 1) {
+                 m_targetDistance = static_cast<double>(capNeeded) * static_cast<double>(ONE_AU_IN_METERS);
+                 GVector warp_direction(m_position, where);
++                if (warp_direction.length() > 0.0)
++                    warp_direction.normalize();
+                 GPoint newTarget(m_position + (warp_direction * m_targetDistance));
+ 
+-                m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), newTarget);
+-                if (is_log_enabled(DESTINY__WARP_TRACE))
++                m_targetPoint = newTarget;
++                m_targBubble = sBubbleMgr.GetBubble(mySE->SystemMgr(), m_targetPoint);
++if (is_log_enabled(DESTINY__WARP_TRACE))
+                     _log(DESTINY__TRACE, "Destiny::WarpTo():Update - %s(%u) target bubble: %u  m_stopDistance: %i  m_targetDistance: %.2f",
+                         mySE->GetName(), mySE->GetID(), m_targBubble->GetID(), m_stopDistance, m_targetDistance);
+             } else {
+@@ -2527,7 +2636,13 @@ PyResult DestinyManager::AttemptDockOperation()
+          mySE->GetName(), mySE->GetID(), stationID);
+ 
+     pClient->SetStateTimer(Player::State::Dock, sConfig.world.StationDockDelay * 1000);
+-    pClient->SetAutoPilot(false);
++
++    // IMPORTANT (Crucible behavior):
++    // Do not force-clear autopilot here.
++    // The client handles autopilot state as it transitions into docking.
++    // Clearing it server-side during the docking arm/timer phase can cause
++    // autopilot to shut off mid-route right after a jump (the symptom we're
++    // chasing here).
+ 
+     return PyStatic.NewNone();
+ }
+@@ -2918,11 +3033,13 @@ void DestinyManager::UpdateOldShip(ShipSE* pShipSE)
+ 
+     SendBallInteractive(pShipSE->GetShipItemRef(), false);
+     m_hasSentShipUpdates = false;
++    m_lastWarpStopMS = 0;
+ }
+ 
+ void DestinyManager::Jump(bool showCloak)
+ {
+     Halt();
++    m_lastJumpMS = GetTimeMSeconds();
+     if (showCloak) {
+         m_cloaked = true;
+     }
+@@ -3352,9 +3469,20 @@ void DestinyManager::SendBallInteractive(const ShipItemRef shipRef, bool set/*fa
+ 
+ void DestinyManager::SendJumpOutEffect(std::string JumpEffect, uint32 shipID) const {
+     std::vector<PyTuple*> updates;
+-    CmdStop du;
+-        du.entityID = mySE->GetID();
+-    updates.push_back(du.Encode());
++
++    // Crucible behavior: when autopilot is active, avoid sending a CmdStop destiny update as part of
++    // the jump-out effect. The client can interpret this as a pilot-issued stop and turn off
++    // autopilot right as the session change begins.
++    Client* pClient = mySE->GetPilot();
++    const bool preserveAutoPilot = (pClient != nullptr) && pClient->IsAutoPilot();
++    if (!preserveAutoPilot) {
++        CmdStop du;
++            du.entityID = mySE->GetID();
++        updates.push_back(du.Encode());
++    } else {
++        _log(AUTOPILOT__TRACE, "Destiny::SendJumpOutEffect() - suppressing CmdStop to preserve autopilot during jump-out.");
++    }
++
+     OnSpecialFX14 effect;
+         effect.entityID = mySE->GetID();
+         effect.targetID = new PyInt(shipID);
+@@ -3416,11 +3544,105 @@ void DestinyManager::SendTerminalExplosion(uint32 shipID, uint32 bubbleID, bool
+     SendSingleDestinyUpdate(&up);   // consumed
+ }
+ 
++void DestinyManager::PostJumpInReset()
++{
++    // Jump-in stabilization.
++    // A session change can sometimes leave internal warp state hanging around,
++    // which makes the client UI believe the ship is still warping.
++    // We reset internal movement/warp state and send a minimal destiny update
++    // (no CmdStop) so autopilot can continue normally.
++
++    // Clear warp state.
++    SafeDelete(m_warpState);
++    m_ballMode = Destiny::Ball::Mode::STOP;
++
++    // Reset movement flags/state.
++    m_bump = false;
++    m_stop = false;
++    m_accel = false;
++    m_decel = false;
++    m_turning = false;
++    m_orbiting = 0;
++    m_changeDelay = false;
++
++    // Zero velocity/speed fractions.
++    m_velocity = GVector(NULL_ORIGIN);
++    m_prevSpeed = 0.0f;
++
++    // Crucible quirk: right after jump-in, the client is highly sensitive to
++    // stop-equivalent throttle updates. If autopilot was enabled pre-jump,
++    // keep the pilot's preferred throttle non-zero (without moving the ship)
++    // to avoid the client interpreting this as a *manual stop* and toggling
++    // autopilot off client-side.
++    float desiredFraction = 0.0f;
++    Client* pilot = mySE->HasPilot() ? mySE->GetPilot() : nullptr;
++    if (pilot != nullptr && pilot->IsAutoPilot()) {
++        desiredFraction = 0.75f; // classic Crucible AP travel fraction
++    }
++
++    m_userSpeedFraction = desiredFraction;
++    m_activeSpeedFraction = desiredFraction;
++    m_prevSpeedFraction = desiredFraction;
++
++    // Keep our internal position in sync.
++    m_position = mySE->GetPosition();
++    m_targetPoint = m_position;
++
++    if (!mySE->HasPilot()) {
++        return;
++    }
++
++    std::vector<PyTuple*> updates;
++
++    // Explicitly tell the client we are not warping.
++    OnSpecialFX10 sfx;
++    sfx.guid = "effects.Warping";
++    sfx.entityID = mySE->GetID();
++    sfx.isOffensive = false;
++    sfx.start = false;
++    sfx.active = false;
++    updates.push_back(sfx.Encode());
++
++    // Prime speed fraction and velocity. Velocity is always reset to 0 on jump-in.
++    // Speed fraction is 0 unless autopilot is enabled (see desiredFraction above).
++    if (pilot != nullptr && is_log_enabled(AUTOPILOT__TRACE)) {
++        _log(AUTOPILOT__TRACE,
++             "Destiny::PostJumpInReset() - AP=%s set speedFraction=%.2f (velocity forced 0)",
++             (pilot->IsAutoPilot() ? "true" : "false"),
++             desiredFraction);
++    }
++
++    CmdSetSpeedFraction ssf;
++    ssf.entityID = mySE->GetID();
++    ssf.fraction = desiredFraction;
++    updates.push_back(ssf.Encode());
++
++    SetBallVelocity sbv;
++    sbv.entityID = mySE->GetID();
++    sbv.x = 0.0;
++    sbv.y = 0.0;
++    sbv.z = 0.0;
++    updates.push_back(sbv.Encode());
++
++    SendDestinyUpdate(updates);
++}
++
+ void DestinyManager::SendSetState() const {
+     if (!mySE->HasPilot()) {
+         return;
+     }
+ 
++    Client* pClient = mySE->GetPilot();
++    // Autopilot debug (avoid introducing out-of-scope locals / stray statements).
++    if (pClient != nullptr && pClient->IsAutoPilot()) {
++        const uint32 ego      = static_cast<uint32>(mySE->GetID());
++        const uint32 stamp    = static_cast<uint32>(sEntityList.GetStamp());
++        const uint32 ballMode = static_cast<uint32>(m_ballMode);
++        _log(AUTOPILOT__TRACE,
++             "Destiny.SendSetState - sending SetState ego=%u stamp=%u ballMode=%u",
++             ego, stamp, ballMode);
++    }
++
+     if (is_log_enabled(DESTINY__MESSAGE)) {
+         _log(
+             DESTINY__MESSAGE,
+@@ -3467,6 +3689,23 @@ void DestinyManager::SendSetState() const {
+         return;
+     }
+ 
++    // --- Crucible autopilot/session-change quirk ---------------------------------
++    // After a gate jump, the client is in a short "settle" window (cloak/invul). If
++    // the first full-state SetState bundle for the ego ship encodes a stop-equivalent
++    // throttle (speedFraction == 0) the Crucible client can treat that as *pilot intent*
++    // and toggle autopilot off client-side.
++    //
++    // We avoid overriding any player-set throttle by only priming a non-zero fraction
++    // when the pilot currently has autopilot enabled and destiny has not yet recorded
++    // a non-zero commanded fraction.
++    if (mySE->HasPilot()) {
++        Client* pilot = mySE->GetPilot();
++        if (pilot != nullptr && pilot->IsAutoPilot() && m_userSpeedFraction <= 0.0001f) {
++            // Autopilot travel speed is reduced in Crucible; 0.75 is the classic value.
++            const_cast<DestinyManager*>(this)->PrimeUserSpeedFractionForSetState(0.75f);
++        }
++    }
++
+     mySE->SystemMgr()->MakeSetState(mySE->SysBubble(), ss);
+ 
+     PyTuple* tmp(ss.Encode());
+@@ -3586,4 +3825,4 @@ void DestinyManager::SendDestinyUpdate(std::vector<PyTuple*>& updates, std::vect
+         events.size(),
+         (mySE != nullptr ? mySE->GetID() : 0)
+     );
+-}
+\ No newline at end of file
++}
+diff --git a/src/eve-server/system/DestinyManager.h b/src/eve-server/system/DestinyManager.h
+index 79cfd22e..b33fc7c2 100644
+--- a/src/eve-server/system/DestinyManager.h
++++ b/src/eve-server/system/DestinyManager.h
+@@ -126,7 +126,7 @@ public:
+     void UpdateShipVariables();
+ 
+     /* Global Actions */
+-    void Stop();
++    void Stop(bool userCmd=false);
+     void Halt();     // puts entity at 0 velocity
+     void Eject();   // avoid numerous other redirect calls
+     void SetCloak(bool set=false)                       { m_cloaked = set; }
+@@ -315,6 +315,19 @@ protected:
+ private:
+     bool m_frozen;                      // hack to keep ship from moving when using modules that prevent movement
+     bool m_changeDelay;                 // this is to try to sync destiny with client, as client has a delay when changing destiny states.
++    // Autopilot/jump settle helpers (Crucible behavior: avoid client interpreting server stop as manual stop)
++    uint32 m_lastWarpStopMS;
++    uint32 m_lastJumpMS;
++    bool   m_postJumpResetPending;
++
++    // One-shot override to prime a speed fraction in the next SetState (used to preserve AP state across session changes)
++    bool  m_hasSetStateSpeedFractionOverride;
++    float m_setStateSpeedFractionOverride;
++
++    void PrimeUserSpeedFractionForSetState(float fraction);
++    bool RecentlyWarpStopped(uint32 withinMs=5000) const;
++    bool RecentlyJumped(uint32 withinMs=5000) const;
++    void PostJumpInReset();
+ 
+     // check to align destiny movement to tic
+     bool m_ticAlign;

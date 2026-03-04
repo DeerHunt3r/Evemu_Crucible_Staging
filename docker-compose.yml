@@ -9,14 +9,10 @@ services:
     volumes:
       - evemu_mariadb:/bitnami
     environment:
-      # IMPORTANT:
-      # - Root password is controlled by MARIADB_ROOT_PASSWORD
-      # - The normal app user uses MARIADB_USER / MARIADB_PASSWORD
       - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD:-evemu_root_pass123}
       - MARIADB_DATABASE=${MARIADB_DATABASE:-evemu}
       - MARIADB_USER=${MARIADB_USER:-evemu}
       - MARIADB_PASSWORD=${MARIADB_PASSWORD:-evemu_pass}
-      # Optional (dev only)
       - MARIADB_CHARACTER_SET=utf8mb4
       - MARIADB_COLLATE=utf8mb4_unicode_ci
     healthcheck:
@@ -25,9 +21,7 @@ services:
       timeout: 5s
       retries: 30
 
-  # One-shot DB seed/import runner.
-  # Uses your repo's ./sql directory and imports ./sql/base/*.sql.gz into the evemu DB.
-  # Enabled only when you run with: --profile seed
+  # One-shot DB seed/import runner (unchanged behavior)
   seed:
     image: bitnami/mariadb:latest
     container_name: evemu_seed
@@ -71,25 +65,33 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+    # THIS is the key to "one container, edits reflected":
+    # mount your working tree into /src, and keep build output in a named volume.
     volumes:
-      - config:/app/etc
+      - ./:/src
+      - build_cache:/src/build
+
+      # keep your existing runtime mounts
+      - ./etc:/src/etc
       - server_cache:/app/server_cache
       - /home/rob/EVEImages:/app/image_cache
-      - logs:/app/logs
+      - ./logs:/src/logs
+
     ports:
       - "26000:26000"
       - "26001:26001"
+
     environment:
-      # These are your existing "seed sections" (in-server behavior).
-      # Keep them, but they are NOT a DB bootstrap/import replacement.
+      # keep your seed sections (server behavior)
       - SEED_MARKET=${SEED_MARKET:-TRUE}
       - SEED_SATURATION=${SEED_SATURATION:-80}
       - SEED_REGIONS=${SEED_REGIONS:-Derelik,The Citadel,The Forge,Essence,Verge Vendor,Everyshore,Tash-Murkon,Sinq Laison}
 
-      # Keep your debug toggle
+      # keep your debug toggle
       - RUN_WITH_GDB=${RUN_GDB:-FALSE}
 
-      # If your server binary reads DB creds from env, these are handy to have consistent:
+      # keep DB env consistency
       - DB_HOST=${DB_HOST:-db}
       - DB_PORT=${DB_PORT:-3306}
       - DB_NAME=${DB_NAME:-evemu}
@@ -103,6 +105,5 @@ services:
 
 volumes:
   evemu_mariadb:
-  config:
   server_cache:
-  logs:
+  build_cache:

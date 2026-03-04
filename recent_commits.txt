@@ -1,0 +1,30 @@
+ffff57b7 (HEAD -> main, tag: baseline-crucible-fitting-2026-02-06, origin/main) Merge staging: Crucible fitting baseline fix
+06411fcf (origin/staging, staging) Fix Crucible fitting Personal: FitFitting registers modules, strip/fit refresh works
+7ef50f84 Merge staging: Crucible Auto-Dock fix baseline
+24e43288 Fix Crucible Auto-Dock: persist dock across station warp and approach after warp
+b7b5845c Establish new stable baseline(cargo fixes, stable client)
+b8809315 Port cargo handling changes from d666a20 onto baseline 8f39952
+8f399520 (tag: crucible-dogma-stable) Stabilize dogma baseline module rings and targeting restored
+2ed1a678 TCPConnection: prevent pure-virtual during teardown (keep handshake behavior)
+1ed73d7c (tag: baseline-warp-fx-2025-12-20) Warp FX stabilized: baseline state (movement, warp, dock/undock functional)
+65449060 WIP:  Warp FX instrumentation stable (tunnel+decloak working)
+e6764065 Checkpoint: Destiny FX instrumentation working ~85%, pre-fx-only patch
+b64e8da9 Fix: stabilize login/undock warp + PyRep ref safety
+0e7a31e4 Merge branch 'feature/module-state-machine'
+2bdc7d32 Fix: Stabilize the mining laser null-target crash and add mining diags
+5afa7e02 Fix Salvager Wreck->jetcan flow and FX teardown; prevent salvage segfaults
+f5dbf04e Initial Module review and rework, Implement CCP-authentic salvaging: salvage + wreck loot moved to jet can.  Several other changes
+1ffa67ed Concord Police V2: high sec police response AI targeting and amplified offender damage insta kill
+299c32a7 Cleanup: removed obsolete Concord NPC files; kept stub ConcordSpawner and other server fixes
+d276530a Gate env spawner v1: Billboards and sentry guns via pure c++
+97250e6e Gate environment spawner: pure C++ templates for billboards/sentries
+d605b6a0 Revert "Billboard Spawner: single-spawn logic, static tables, logs"
+16efae26 Revert "Billboard Spawner: add GateDecorator_Billboards, CMake wiring, SystemManager hook"
+66d397a9 Revert "BillboardSpawner: wire SystemManager hook + compose tweaks"
+1dbf2e3a Revert "BillboardSpawner: integrated into SystemManager (working)"
+117a9019 Revert "Merge billboard spawner feature"
+b56943cb Bubble System Update: 1000km grids, bubble merging, hysteresis and improved warp landing stability
+4d046056 Bubble grid merging, 1000km radius, hysteresis, no more push-away
+aac4ace4 Worked on Contacts, add and edit work, add works for agents too
+909deddd Fixed an error in notepad. works good now.  Working on the Calendar, seems like all DB stuff works, but the client doesn't refresh on delete and edit
+2711870e Fix: working on modules and initial calendar fixes

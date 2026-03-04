@@ -267,6 +267,27 @@ SystemBubble* BubbleManager::GetBubble(SystemManager* sysMgr, const GPoint& pos)
     return pBubble;
 }
 
+SystemBubble* BubbleManager::GetBubble(SystemManager* sysMgr, const GPoint& pos, bool inWarp)
+{
+    // Warp-aware overload.
+    // Uses SystemBubble::InBubble(pos, inWarp) so callers can apply stricter
+    // containment rules while in warp (no hysteresis).
+    SystemBubble* pBubble = nullptr;
+
+    auto range = m_sysBubbleMap.equal_range(sysMgr->GetID());
+    for (auto itr = range.first; itr != range.second; ++itr) {
+        if (itr->second->InBubble(pos, inWarp)) {
+            pBubble = itr->second;
+            break;
+        }
+    }
+
+    if (pBubble == nullptr)
+        pBubble = MakeBubble(sysMgr, pos);
+
+    return pBubble;
+}
+
 SystemBubble* BubbleManager::MakeBubble(SystemManager* sysMgr, GPoint pos) {
     // Try to reuse or merge with an existing bubble.
     SystemBubble* mergeCandidate = nullptr;
@@ -342,6 +363,15 @@ void BubbleManager::RemoveBubble(uint32 systemID, SystemBubble* pSB)
     if (itr != m_bubbleIDMap.end())
         m_bubbleIDMap.erase(itr);
 }
+void BubbleManager::AddBubble(uint32 systemID, SystemBubble* pBubble)
+{
+    if (pBubble == nullptr)
+        return;
+
+    m_bubbleIDMap.emplace(pBubble->GetID(), pBubble);
+    m_sysBubbleMap.emplace(systemID, pBubble);
+}
+
 
 /* for beltmgr */
 void BubbleManager::AddSpawnID(uint16 bubbleID, uint32 spawnID)

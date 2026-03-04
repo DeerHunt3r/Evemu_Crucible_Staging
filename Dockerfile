@@ -1,7 +1,9 @@
-# Base image for building EVEmu using Debian 12
-FROM debian:12 AS base
+# EVEmu Crucible - Dev Runtime (single-container workflow)
+# Goal: edit source on host, compile + run in the same container without image rebuilds.
 
-# Install build dependencies
+FROM debian:12
+
+# Build + runtime deps
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
@@ -18,65 +20,78 @@ RUN apt-get update && \
     gdb \
     libutfcpp-dev \
     mariadb-client \
-    passwd \
+    pkg-config \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Build stage
-FROM base AS app-build
+# Keep legacy expectations (your compose mounts these)
+RUN mkdir -p /app/etc /app/logs /app/server_cache /app/image_cache
 
-# Add project files
-COPY CMakeLists.txt /src/
-COPY config.h.in /src/
-COPY /cmake/ /src/cmake
-COPY /dep/ /src/dep
-COPY /src/ /src/src
-COPY /utils/ /src/utils
+# Create a persistent source+build workspace
+RUN mkdir -p /src /src/build
 
-# Included for cmake to read git rev-hash (if present)
-COPY /.git/ /src/.git
+# Dev start script:
+# - configures cmake once (or when cache is missing)
+# - builds every start (so edits are always compiled)
+# - runs the freshly built binary
+RUN cat > /usr/local/bin/evemu-dev-start.sh << 'EOF' && chmod +x /usr/local/bin/evemu-dev-start.sh
+#!/bin/sh
+set -eu
 
-# Create necessary directories
-RUN mkdir -p /src/build /app /app/logs /app/server_cache /app/image_cache
+SRC="/src"
+BUILD="/src/build"
 
-ENV MYSQL_INCLUDE_DIR="/usr/include/mariadb"
-ENV MYSQL_LIBRARIES="/usr/lib/x86_64-linux-gnu/libmariadbclient.so"
+echo "=================================================================="
+echo "EVEmu dev start"
+echo "  SRC  : ${SRC}"
+echo "  BUILD: ${BUILD}"
+echo "=================================================================="
 
-# Set working directory
+if [ ! -f "${SRC}/CMakeLists.txt" ]; then
+  echo "ERROR: ${SRC}/CMakeLists.txt not found."
+  echo "This container expects your repo bind-mounted to /src."
+  exit 1
+fi
+
+mkdir -p "${BUILD}"
+
+# Show exactly what source revision we are compiling (if .git is present)
+if [ -d "${SRC}/.git" ]; then
+  echo "Git hash (host repo, inside container): $(cd "${SRC}" && git rev-parse HEAD)"
+else
+  echo "Git hash: (no .git present inside /src)"
+fi
+
+cd "${BUILD}"
+
+# Configure once (or if build dir was wiped)
+if [ ! -f "CMakeCache.txt" ]; then
+  echo "[cmake] configuring..."
+  cmake -DCMAKE_BUILD_TYPE=Debug ..
+fi
+
+echo "[make] building..."
+make -j"$(nproc)"
+
+BIN="${BUILD}/src/eve-server/eve-server"
+if [ ! -x "${BIN}" ]; then
+  echo "ERROR: server binary not found at ${BIN}"
+  echo "If your build outputs elsewhere, we can adjust this path."
+  exit 1
+fi
+
+echo "Built binary: ${BIN}"
+echo "Binary timestamp: $(ls -l "${BIN}")"
+echo "=================================================================="
+
+# Optional: run under gdb if enabled
+if [ "${RUN_WITH_GDB:-FALSE}" = "TRUE" ] || [ "${RUN_WITH_GDB:-FALSE}" = "true" ]; then
+  exec gdb --args "${BIN}"
+fi
+
+exec "${BIN}"
+EOF
+
+EXPOSE 26000 26001
+
 WORKDIR /src/build
-
-# Configure and build the project
-RUN cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Debug ..
-RUN make -j$(nproc)
-RUN make install
-
-# Bake build fingerprint into the install tree (no need for git inside runtime container)
-RUN mkdir -p /app/etc && \
-    (cd /src && git rev-parse HEAD > /app/etc/build_git_hash.txt 2>/dev/null || echo "nogit" > /app/etc/build_git_hash.txt) && \
-    date -u +"%Y-%m-%dT%H:%M:%SZ" > /app/etc/build_utc.txt
-
-# Final runtime image
-FROM base AS app
-
-LABEL description="EVEmu Server"
-
-# Copy built assets
-COPY --from=app-build /src/utils/ /src/utils
-COPY --from=app-build /app/ /app
-
-# ? IMPORTANT: copy source tree into runtime so you can verify the exact files being built/running
-COPY --from=app-build /src/src/ /src/src
-COPY --from=app-build /src/CMakeLists.txt /src/CMakeLists.txt
-COPY --from=app-build /src/config.h.in /src/config.h.in
-
-# Add SQL loading tools
-COPY /sql/ /src/sql
-
-# Run SQL tool script
-RUN cd /src/sql && ./get_evedbtool.sh
-
-# Expose server ports
-EXPOSE 26000
-EXPOSE 26001
-
-# Default command
-CMD ["/src/utils/container-scripts/start.sh"]
+CMD ["/usr/local/bin/evemu-dev-start.sh"]

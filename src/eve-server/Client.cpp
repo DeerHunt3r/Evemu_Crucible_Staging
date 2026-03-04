@@ -51,9 +51,9 @@
 //#include "npc/DroneAI.h"
 #include "station/StationDataMgr.h"
 #include "station/StationOffice.h"
+#include "system/SystemBubble.h"
 #include "system/DestinyManager.h"
 #include "system/SystemManager.h"
-#include "system/SystemBubble.h"
 #include "system/cosmicMgrs/AnomalyMgr.h"
 #include "exploration/Scan.h"
 #include "station/Station.h"
@@ -90,6 +90,8 @@ Client::Client(EVEServiceManager& services, EVETCPConnection** con)
   m_destinyUpdateQueue(new PyList()),
   m_nextNotifySequence(0)
 {
+    m_lastWarpStopTime = 0;
+
     m_pod = ShipItemRef(nullptr);
     m_ship = ShipItemRef(nullptr);
 
@@ -660,6 +662,22 @@ void Client::SetAutoPilot(bool set/*false*/)
     _log(AUTOPILOT__MESSAGE, "%s called SetAutoPilot to %s", GetName(), (set ? "true" : "false"));
 }
 
+
+void Client::NoteWarpStop()
+{
+    m_lastWarpStopTime = GetFileTimeNow();
+}
+
+bool Client::IsWarpStopRecent(uint32 ms) const
+{
+    if (m_lastWarpStopTime <= 0)
+        return false;
+
+    const int64 now = GetFileTimeNow();
+    const int64 delta = (now > m_lastWarpStopTime) ? (now - m_lastWarpStopTime) : 0;
+    return (delta < (int64(ms) * 10000));  // 100ns ticks, 1ms = 10,000 ticks
+}
+
 void Client::EnterSystem(uint32 systemID)
 {
     MoveToLocation(systemID, m_ship->position());
@@ -873,39 +891,47 @@ void Client::SetDestiny(const GPoint& pt, bool update/*false*/) {
 }
 
 void Client::SetBallPark() {
-    _log(PLAYER__AP_TRACE, "Client::SetBallPark():  State: %s, SetState: %s, Beyonce: %s", \
-                GetStateName(m_clientState).c_str(), m_setStateSent?"true":"false", m_beyonce?"true":"false");
-    m_bubbleWait = false;   // allow client processing of subsequent destiny msgs
-    if (pShipSE->SysBubble() == nullptr)
-        m_system->AddEntity(pShipSE);
-    if (!m_beyonce and !m_login and !m_undock) {
-        m_bubbleWait = true;    // wait on proc destiny msgs
-        CheckBallparkTimer();
-        SetBallParkTimer(Player::Timer::Default);    // set timer 1s to wait for beyonce
+    // Crucible-like ballpark settle: once we have a ship entity AND a bubble, send SetState once,
+    // then stop retrying. Repeated SetBallPark calls can cause the client to loop "Entering Space".
+    ShipSE* pShipSE = GetShipSE();
+    if (pShipSE == nullptr) {
         return;
     }
-    if (!m_setStateSent and m_beyonce) {  // MUST have beyonce before sending state data.
-        pShipSE->DestinyMgr()->SendSetState();
-        m_ballparkTimer.Disable();
-        if (IsGateJump()) {
-            SetInvulTimer(Player::Timer::JumpInvul);
-            // dont use timer method here...(jumping ship will flash at destination)
-            m_cloakTimer.Start(Player::Timer::JumpCloak);
-            m_clientState = Player::State::Idle;
-        }
-        if (IsDriveJump()) {
-            SetInvulTimer(Player::Timer::JumpInvul);
-            m_clientState = Player::State::Idle;
-            JumpInEffect();
-        }
-        if (IsWormholeJump()) {
-            SetInvulTimer(Player::Timer::JumpInvul);
-            m_cloakTimer.Start(Player::Timer::JumpCloak);
-            m_clientState = Player::State::Idle;
-        }
+
+    SystemBubble* pBubble = pShipSE->SysBubble();
+    if (pBubble == nullptr || !m_beyonce) {
+        // We're not ready yet (jump/undock in progress). Keep the timer running and wait.
+        m_bubbleWait = true;
+        SetBallParkTimer(Player::Timer::Default);
+        return;
     }
-    if (m_undock)
-        pShipSE->DestinyMgr()->SetSpeedFraction();
+
+    // If SetState already sent for this ballpark settle, we're done.
+    if (m_setStateSent) {
+        m_bubbleWait = false;
+        SetBallParkTimer(0);
+        // If we were in a jump state, the ballpark settle completes the jump.
+        if (m_clientState == Player::State::Jump || m_clientState == Player::State::DriveJump || m_clientState == Player::State::WormholeJump) {
+            m_clientState = Player::State::Idle;
+            _log(CLIENT__TIMER, "SetBallPark(): jump complete (cached); m_clientState set to Idle for %s(%u)", m_char->name(), m_char->itemID());
+        }
+
+        return;
+    }
+
+    // Send authoritative self state once to complete the enter-space transition.
+    pShipSE->DestinyMgr()->SendSetState();
+    m_setStateSent = true;
+
+    // Ballpark is ready and we have sent SetState; clear any lingering jump flags.
+    if (m_clientState == Player::State::Jump || m_clientState == Player::State::DriveJump || m_clientState == Player::State::WormholeJump) {
+        m_clientState = Player::State::Idle;
+        _log(CLIENT__TIMER, "SetBallPark(): jump complete; m_clientState set to Idle for %s(%u)", m_char->name(), m_char->itemID());
+    }
+
+
+    m_bubbleWait = false;
+    SetBallParkTimer(0);
 }
 
 void Client::CheckBallparkTimer() {
@@ -1456,6 +1482,15 @@ PyRep *Client::GetAggressors() const {
 }
 
 void Client::StargateJump(uint32 fromGate, uint32 toGate) {
+    // Jump should cancel any stale docking intent/state that could block gate travel.
+    if (IsPendingDock() || m_clientState == Player::State::Dock) {
+        _log(AUTOPILOT__TRACE, "StargateJump(): canceling pending dock state for %s", GetName());
+        CancelDockRequest();
+        ClearPendingDock();
+        m_stateTimer.Disable();
+        m_clientState = Player::State::Idle;
+    }
+
     if ((m_clientState != Player::State::Idle) or m_stateTimer.Enabled()) {
         sLog.Error("Client","%s: StargateJump called when a move is already pending. Ignoring.", m_char->name());
         /** @todo  send error to client here */

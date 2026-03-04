@@ -274,6 +274,13 @@ public:
     bool IsAutoPilot()                                  { return m_autoPilot; }
     void SetAutoPilot(bool set=false);
 
+    // Autopilot settle-window helpers (post-warp / post-jump CmdStop echo suppression)
+    void NoteWarpStop();
+    bool IsWarpStopRecent(uint32 ms = 2500) const;
+    void NoteJumpComplete();
+    bool IsJumpRecent(uint32 ms = 8000) const;
+
+
     void JumpInEffect();
     void JumpOutEffect(uint32 locationID);
 
@@ -381,7 +388,10 @@ protected:
     bool m_autoStop;        // boolean for auto-stopping modules when target attrib is full (ROLE_PLAYER)
     bool m_packaged;        // used to correctly package updates into a PackagedAction list
     bool m_portrait;        // used to verify new char pic received
-    bool m_autoPilot;       // set true for using autopilot.
+    bool m_autoPilot;
+    int64 m_lastWarpStopTime;   // filetime (100ns) of last server-issued settle stop
+    int64 m_lastJumpTime;       // filetime (100ns) of last jump completion
+       // set true for using autopilot.
     bool m_scanProbe;       // scanning with probes
     bool m_bubbleWait;
     bool m_setStateSent;

@@ -656,12 +656,16 @@ PyResult BeyonceBound::CmdStop(PyCallArgs &call) {
 
     call.client->SetUndock(false);
 
-    // Do NOT cancel pending docking here.
-    // Crucible client may issue stop-like commands during/after warp settle,
-    // and clearing docking intent causes the "warp in then forget to dock" bug.
-    call.client->SetAutoPilot(false);
+    // CmdStop comes from the client for both:
+    //  - explicit user STOP (should cancel autopilot)
+    //  - session-change/warp/jump settle STOPs (must NOT cancel autopilot)
+    const bool apActive = call.client->IsAutoPilot();
+    const bool ignoreAPCancel = apActive && (call.client->IsInvul() || call.client->IsSessionChange() || call.client->IsJump() || call.client->IsGateJump());
 
-    pDestiny->Stop();
+    if (!ignoreAPCancel)
+        call.client->SetAutoPilot(false);
+
+    pDestiny->Stop(!ignoreAPCancel);
 
     return PyStatic.NewNone();
 
@@ -679,11 +683,9 @@ PyResult BeyonceBound::CmdDock(PyCallArgs &call, PyInt* celestialID, PyInt* ship
         codelog(CLIENT__ERROR, "%s: Client has no destiny manager!", call.client->GetName());
         return PyStatic.NewNone();
     } else if (pDestiny->IsWarping()) {
-        call.client->SendNotifyMsg( "You can't do this while warping");
-        return PyStatic.NewNone();
-    }  else if (pDestiny->AbortIfLoginWarping(true)) {
-        return PyStatic.NewNone();
-    } else if (pDestiny->IsFrozen()) {
+        // Crucible-like: allow docking intent to be queued during warp.
+        // We persist pending dock below and let DestinyManager DockHook complete on arrival.
+    }else if (pDestiny->IsFrozen()) {
         call.client->SendNotifyMsg( "Your ship is frozen and cannot move");
         return PyStatic.NewNone();
     }
@@ -693,12 +695,20 @@ PyResult BeyonceBound::CmdDock(PyCallArgs &call, PyInt* celestialID, PyInt* ship
         return PyStatic.NewNone();
     }
 
-    //  this sets m_dockStationID for radius checks and other things
+
+    // Persist docking intent immediately (Crucible behavior: can request dock while warping).
+    // Crucible client voice cues are tied to the docking request flow.
+    // Ensure we emit the same "Docking permission requested" cue even when docking is queued
+    // during warp (auto-dock path).
     call.client->RequestDock(celestialID->value());
+    call.client->SendNotifyMsg("Docking permission requested");
     _log(AUTOPILOT__TRACE, "CmdDock() - requested dock station=%u pending=%s",
          celestialID->value(), call.client->IsPendingDock() ? "true" : "false");
 
-    // Start docking flow. This may throw DockingApproach if out of range.
+    // If we are warping (or still finishing login warp), keep intent and let DockHook finish later.
+    if (pDestiny->IsWarping() || pDestiny->AbortIfLoginWarping(true))
+        return this->GetOID();
+    // Start docking flow now if we are not warping.
     pDestiny->AttemptDockOperation();
 
     // Crucible-style: return the bound object ID for the call (consistent with other navigation actions).
@@ -733,6 +743,10 @@ PyResult BeyonceBound::CmdStargateJump(PyCallArgs &call, PyInt* fromStargateID, 
 */
 
     _log(AUTOPILOT__MESSAGE, "%s called Jump. AP: %s", call.client->GetName(), (call.client->IsAutoPilot() ? "true" : "false"));
+    // Jump should cancel any stale docking intent that could leave the client stuck in Dock state.
+    call.client->CancelDockRequest();
+    call.client->ClearPendingDock();
+
     if (call.client->IsSessionChange()) {
         call.client->SendNotifyMsg("Session Change currently active.");
         return PyStatic.NewNone();
